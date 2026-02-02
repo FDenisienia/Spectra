@@ -1,0 +1,458 @@
+/**
+ * Torneo por fechas y canchas — cantidad de jugadores libre (múltiplo de 4 por cancha).
+ * - Cada cancha tiene numPlayers/numCourts jugadores (mínimo 4 por cancha).
+ * - Por fecha, por cancha: 1 bloque de 4 descansa (rotando), el resto juega (1 partido por bloque de 4).
+ * - Primera fecha: clasificatoria (no se aplica escalera).
+ * - A partir de la fecha 2: se aplica escalera (suben 2, bajan 2) al finalizar cada fecha.
+ */
+
+const SETS_PER_MATCH = 3
+const BLOCK_SIZE = 4
+const QUALIFYING_DATES = 1
+
+const defaultState = () => ({
+  config: null,
+  players: [],
+  currentDate: 0,
+  dates: [],
+  status: 'config',
+})
+
+let state = defaultState()
+
+/** Carga el estado desde fuera (para multi-torneo). */
+function initState(loaded) {
+  state = loaded
+    ? JSON.parse(JSON.stringify(loaded))
+    : defaultState()
+  return state
+}
+
+function reset() {
+  state = defaultState()
+}
+
+function setConfig(numCourts, numPlayers) {
+  if (numCourts < 1) throw new Error('Debe haber al menos una cancha')
+  if (numPlayers < numCourts * BLOCK_SIZE) {
+    throw new Error(`Mínimo ${numCourts * BLOCK_SIZE} jugadores (4 por cancha)`)
+  }
+  const playersPerCourt = numPlayers / numCourts
+  if (!Number.isInteger(playersPerCourt)) {
+    throw new Error('El total de jugadores debe ser divisible por la cantidad de canchas')
+  }
+  if (playersPerCourt % BLOCK_SIZE !== 0) {
+    throw new Error('Jugadores por cancha deben ser múltiplo de 4 (ej: 8, 12, 16, 20 por cancha)')
+  }
+  state.config = { numCourts, numPlayers, qualifyingDates: QUALIFYING_DATES }
+  state.players = []
+  state.currentDate = 0
+  state.dates = []
+  state.status = 'players'
+  return state
+}
+
+function addPlayers(names) {
+  if (!state.config) throw new Error('Configura primero canchas y número de jugadores')
+  if (names.length !== state.config.numPlayers) {
+    throw new Error(`Debes cargar exactamente ${state.config.numPlayers} jugadores`)
+  }
+  const { numCourts, numPlayers } = state.config
+  const playersPerCourt = numPlayers / numCourts
+  state.players = names.map((name, i) => {
+    const courtIndex = Math.floor(i / playersPerCourt)
+    const positionInCourt = (i % playersPerCourt) + 1
+    return {
+      id: `p-${i + 1}`,
+      name: name.trim() || `Jugador ${i + 1}`,
+      courtIndex,
+      positionInCourt,
+      gamesInDate: 0,
+      setsWonInDate: 0,
+      matchesPlayedInDate: 0,
+      totalGames: 0,
+      totalSets: 0,
+      totalMatches: 0,
+    }
+  })
+  state.status = 'date'
+  state.currentDate = 1
+  return state
+}
+
+/**
+ * Qué bloque descansa en esta fecha (rotación: bloque 0, 1, 2, ... por fecha).
+ */
+function getRestBlockForDate(dateIndex, numBlocks) {
+  if (numBlocks <= 1) return 0
+  return dateIndex % numBlocks
+}
+
+/**
+ * Por cancha: N jugadores (múltiplo de 4). Un bloque de 4 descansa (solo si hay 2+ bloques), cada otro bloque = 1 partido (1-2 vs 3-4).
+ * Con 4 jugadores (1 bloque) no hay descanso: se juega 1 partido.
+ */
+function generateMatchesForCourt(courtPlayers, dateIndex, courtIndex) {
+  const safe = (courtPlayers || []).filter((p) => p != null && p.id != null)
+  if (safe.length < BLOCK_SIZE) return []
+  const numBlocks = Math.floor(safe.length / BLOCK_SIZE)
+  const restBlock = getRestBlockForDate(dateIndex, numBlocks)
+  const matches = []
+  for (let block = 0; block < numBlocks; block++) {
+    if (numBlocks > 1 && block === restBlock) continue
+    const base = block * BLOCK_SIZE
+    const a = safe[base]?.id
+    const b = safe[base + 1]?.id
+    const c = safe[base + 2]?.id
+    const d = safe[base + 3]?.id
+    if (a == null || b == null || c == null || d == null) continue
+    matches.push({
+      id: `date${dateIndex + 1}-c${courtIndex}-b${block}`,
+      courtIndex,
+      blockIndex: block,
+      pair1: [a, b],
+      pair2: [c, d],
+      sets: [
+        { pair1Games: 0, pair2Games: 0 },
+        { pair1Games: 0, pair2Games: 0 },
+        { pair1Games: 0, pair2Games: 0 },
+      ],
+      completed: false,
+    })
+  }
+  return matches
+}
+
+function generateDateMatches() {
+  if (!state.config) throw new Error('Faltan configuración del torneo. Reiniciá desde Configuración.')
+  if (!state.players.length) throw new Error('No hay jugadores cargados. Reiniciá y cargá los jugadores.')
+  const { numCourts, numPlayers } = state.config
+  if (state.players.length !== numPlayers) {
+    throw new Error(`Se esperan ${numPlayers} jugadores. Reiniciá el torneo y cargá exactamente ${numPlayers} nombres.`)
+  }
+  const missingCourt = state.players.some((p) => p.courtIndex == null || p.positionInCourt == null)
+  if (missingCourt) {
+    throw new Error('Estado de jugadores incompatible. Reiniciá el torneo desde Configuración y volvé a cargar jugadores.')
+  }
+  const dateIndex = state.currentDate - 1
+  if (dateIndex < 0) throw new Error('Ronda inválida.')
+  const playersPerCourt = numPlayers / numCourts
+  if (playersPerCourt % BLOCK_SIZE !== 0) {
+    throw new Error('Jugadores por cancha deben ser múltiplo de 4.')
+  }
+
+  if (!state.dates || !Array.isArray(state.dates)) state.dates = []
+
+  const dateData = {
+    dateIndex: state.currentDate,
+    restByCourt: [],
+    courtAssignments: [],
+    matches: [],
+    completed: false,
+    completedMatchOrder: [],
+  }
+
+  const numBlocksPerCourt = playersPerCourt / BLOCK_SIZE
+
+  for (let c = 0; c < numCourts; c++) {
+    const courtPlayers = state.players
+      .filter((p) => p != null && p.courtIndex === c)
+      .sort((a, b) => a.positionInCourt - b.positionInCourt)
+    if (courtPlayers.length !== playersPerCourt) {
+      throw new Error(
+        `Cancha ${c + 1} tiene ${courtPlayers.length} jugadores (debería tener ${playersPerCourt}). Reiniciá el torneo desde Configuración.`
+      )
+    }
+    const restBlock = getRestBlockForDate(dateIndex, numBlocksPerCourt)
+    dateData.restByCourt[c] = numBlocksPerCourt > 1
+      ? courtPlayers.slice(restBlock * BLOCK_SIZE, (restBlock + 1) * BLOCK_SIZE).map((p) => p.id)
+      : []
+    dateData.courtAssignments[c] = courtPlayers.map((p) => p.id)
+    const courtMatches = generateMatchesForCourt(courtPlayers, dateIndex, c)
+    dateData.matches.push(...courtMatches)
+  }
+
+  state.dates[dateIndex] = dateData
+  return dateData
+}
+
+function getCurrentDateData() {
+  if (state.currentDate < 1 || !state.dates[state.currentDate - 1]) return null
+  return state.dates[state.currentDate - 1]
+}
+
+function getMatchById(dateData, matchId) {
+  return (dateData.matches || []).find((m) => m.id === matchId)
+}
+
+function getPlayerIdsInMatch(match) {
+  return [...(match.pair1 || []), ...(match.pair2 || [])]
+}
+
+function getPlayersWhoNeedRest(dateData, matchId) {
+  const match = getMatchById(dateData, matchId)
+  if (!match) return []
+  const playerIds = getPlayerIdsInMatch(match)
+  const order = dateData.completedMatchOrder || []
+  if (order.length === 0) return []
+  const needRest = []
+  for (const pid of playerIds) {
+    let lastIndex = -1
+    for (let i = order.length - 1; i >= 0; i--) {
+      const m = getMatchById(dateData, order[i])
+      if (m && getPlayerIdsInMatch(m).includes(pid)) {
+        lastIndex = i
+        break
+      }
+    }
+    if (lastIndex === order.length - 1) {
+      const p = state.players.find((x) => x.id === pid)
+      if (p) needRest.push(p.name)
+    }
+  }
+  return needRest
+}
+
+function setSetScore(matchId, setIndex, pair1Games, pair2Games) {
+  const dateData = getCurrentDateData()
+  if (!dateData) throw new Error('No hay fecha en curso')
+  const match = getMatchById(dateData, matchId)
+  if (!match) throw new Error('Partido no encontrado')
+  if (setIndex < 0 || setIndex >= SETS_PER_MATCH) throw new Error('Set inválido')
+  match.sets[setIndex] = { pair1Games: Number(pair1Games), pair2Games: Number(pair2Games) }
+  return match
+}
+
+function completeMatch(matchId) {
+  const dateData = getCurrentDateData()
+  if (!dateData) throw new Error('No hay fecha en curso')
+  const match = getMatchById(dateData, matchId)
+  if (!match) throw new Error('Partido no encontrado')
+  if (match.completed) throw new Error('Ese partido ya está finalizado')
+
+  const needRest = getPlayersWhoNeedRest(dateData, matchId)
+  if (needRest.length > 0) {
+    throw new Error(`Deben descansar antes de jugar de nuevo: ${needRest.join(', ')}. Completá otro partido primero.`)
+  }
+
+  const [pair1Sets, pair2Sets] = match.sets.reduce(
+    (acc, set) => {
+      if (set.pair1Games > set.pair2Games) acc[0]++
+      else if (set.pair2Games > set.pair1Games) acc[1]++
+      return acc
+    },
+    [0, 0]
+  )
+  const pair1Games = match.sets.reduce((s, x) => s + x.pair1Games, 0)
+  const pair2Games = match.sets.reduce((s, x) => s + x.pair2Games, 0)
+
+  ;[...match.pair1, ...match.pair2].forEach((id) => {
+    const p = state.players.find((x) => x.id === id)
+    if (p) {
+      if (match.pair1.includes(id)) {
+        p.gamesInDate += pair1Games
+        p.setsWonInDate += pair1Sets
+      } else {
+        p.gamesInDate += pair2Games
+        p.setsWonInDate += pair2Sets
+      }
+      p.matchesPlayedInDate++
+    }
+  })
+
+  match.completed = true
+  if (!dateData.completedMatchOrder) dateData.completedMatchOrder = []
+  dateData.completedMatchOrder.push(matchId)
+  return match
+}
+
+function allMatchesInDateComplete() {
+  const dateData = getCurrentDateData()
+  if (!dateData || !Array.isArray(dateData.matches) || dateData.matches.length === 0) return false
+  return dateData.matches.every((m) => m && m.completed)
+}
+
+function getRankingForDate() {
+  const { numCourts } = state.config
+  const byCourt = {}
+  const players = (state.players || []).filter((p) => p != null && p.id != null)
+  for (let c = 0; c < numCourts; c++) {
+    byCourt[c] = players
+      .filter((p) => p.courtIndex === c)
+      .map((p) => ({ ...p }))
+      .sort((a, b) => {
+        if (b.setsWonInDate !== a.setsWonInDate) return b.setsWonInDate - a.setsWonInDate
+        return b.gamesInDate - a.gamesInDate
+      })
+      .map((p, i) => ({ ...p, positionInCourt: i + 1 }))
+  }
+  return byCourt
+}
+
+/**
+ * Shuffle array (Fisher-Yates) con semilla opcional para variar equipos por fecha.
+ */
+function shuffleWithSeed(arr, seed) {
+  const a = [...arr]
+  let s = seed
+  for (let i = a.length - 1; i > 0; i--) {
+    s = (s * 9301 + 49297) % 233280
+    const j = Math.floor((s / 233280) * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+/**
+ * Escalera circular: suben 2 (pos 1-2), bajan 2 (últimas 2).
+ * Los que bajan de cancha 1 van a la 2, de la 2 a la 3, de la 3 a la 4, de la 4 a la 1.
+ * Cada cancha queda siempre con 4 jugadores.
+ * Tras asignar cancha, se mezclan los 4 jugadores para que cambien los equipos (1-2 vs 3-4 no se mantengan fijos).
+ */
+function applyLadderMovement(byCourt) {
+  const numCourts = state.config.numCourts
+  if (numCourts === 1) return
+
+  const playersPerCourt = state.config.numPlayers / numCourts
+  const movements = []
+  for (let c = 0; c < numCourts; c++) {
+    const courtPlayers = (byCourt[c] || []).filter((p) => p != null && p.id != null)
+    const up = courtPlayers.filter((_, i) => i < 2).map((p) => p.id).filter(Boolean)
+    const down = courtPlayers.filter((_, i) => i >= courtPlayers.length - 2).map((p) => p.id).filter(Boolean)
+    movements.push({ up, down })
+  }
+
+  const idToPlayer = {}
+  state.players.forEach((p) => { if (p && p.id) idToPlayer[p.id] = p })
+
+  for (let c = 0; c < numCourts; c++) {
+    const prevCourt = (c - 1 + numCourts) % numCourts
+    const nextCourt = (c + 1) % numCourts
+    let ids = [
+      ...movements[prevCourt].down,
+      ...movements[nextCourt].up,
+    ]
+    if (ids.length !== playersPerCourt) {
+      continue
+    }
+    ids = shuffleWithSeed(ids, state.currentDate * 10 + c)
+    ids.forEach((id, pos) => {
+      const p = idToPlayer[id]
+      if (p) {
+        p.courtIndex = c
+        p.positionInCourt = pos + 1
+      }
+    })
+  }
+}
+
+function completeDate() {
+  const dateData = getCurrentDateData()
+  if (!dateData) throw new Error('No hay fecha en curso')
+  if (!allMatchesInDateComplete()) {
+    throw new Error('Faltan partidos por completar en esta fecha')
+  }
+
+  state.players.forEach((p) => {
+    p.totalGames = (p.totalGames || 0) + (p.gamesInDate || 0)
+    p.totalSets = (p.totalSets || 0) + (p.setsWonInDate || 0)
+    p.totalMatches = (p.totalMatches || 0) + (p.matchesPlayedInDate || 0)
+  })
+
+  const byCourt = getRankingForDate()
+  dateData.rankingAtEnd = { byCourt }
+  const numCourts = state.config.numCourts
+  const isQualifying = state.currentDate < QUALIFYING_DATES
+  dateData.isQualifying = isQualifying
+  dateData.movements = []
+  for (let c = 0; c < numCourts; c++) {
+    const courtPlayers = byCourt[c]
+    const up = courtPlayers.filter((_, i) => i < 2).map((p) => p.id)
+    const down = courtPlayers.filter((_, i) => i >= courtPlayers.length - 2).map((p) => p.id)
+    dateData.movements.push({ courtIndex: c, up, down })
+  }
+  if (!isQualifying) {
+    applyLadderMovement(byCourt)
+  }
+
+  state.players.forEach((p) => {
+    p.gamesInDate = 0
+    p.setsWonInDate = 0
+    p.matchesPlayedInDate = 0
+  })
+
+  dateData.completed = true
+  state.status = 'date_complete'
+  return state
+}
+
+function startNextDate() {
+  if (state.status !== 'date_complete') {
+    throw new Error('Debes completar la fecha actual antes de iniciar la siguiente')
+  }
+  state.currentDate++
+  state.status = 'date'
+  return generateDateMatches()
+}
+
+function getState() {
+  try {
+    const copy = JSON.parse(JSON.stringify(state))
+    if (Array.isArray(copy.players)) {
+      copy.players = copy.players.filter((p) => p != null && p.id != null)
+    }
+    return copy
+  } catch (_) {
+    return {
+      config: null,
+      players: [],
+      currentDate: 0,
+      dates: [],
+      status: 'config',
+    }
+  }
+}
+
+function getRanking() {
+  if (!state.config || !state.players.length) return { byCourt: {}, global: [] }
+  const { numCourts } = state.config
+  const byCourt = {}
+  for (let c = 0; c < numCourts; c++) {
+    byCourt[c] = state.players
+      .filter((p) => p.courtIndex === c)
+      .sort((a, b) => {
+        const aSets = a.totalSets ?? 0
+        const bSets = b.totalSets ?? 0
+        if (bSets !== aSets) return bSets - aSets
+        return (b.totalGames ?? 0) - (a.totalGames ?? 0)
+      })
+      .map((p, i) => ({ ...p, positionInCourt: i + 1 }))
+  }
+  const global = [...state.players].sort((a, b) => {
+    const aSets = a.totalSets ?? 0
+    const bSets = b.totalSets ?? 0
+    if (bSets !== aSets) return bSets - aSets
+    return (b.totalGames ?? 0) - (a.totalGames ?? 0)
+  }).map((p, i) => ({ ...p, globalPosition: i + 1 }))
+  return { byCourt, global }
+}
+
+export {
+  initState,
+  reset,
+  setConfig,
+  addPlayers,
+  generateDateMatches,
+  getCurrentDateData,
+  setSetScore,
+  completeMatch,
+  completeDate,
+  allMatchesInDateComplete,
+  startNextDate,
+  getState,
+  getRanking,
+  defaultState,
+  SETS_PER_MATCH,
+  BLOCK_SIZE,
+  QUALIFYING_DATES,
+}

@@ -1,0 +1,43 @@
+:root {
+  --spectra-primary: #6366f1;
+  --spectra-dark: #1e1b4b;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.navbar-brand {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.hero {
+  background: linear-gradient(135deg, var(--spectra-dark) 0%, var(--spectra-primary) 100%);
+  color: white;
+  padding: 4rem 0;
+  border-radius: 0 0 2rem 2rem;
+}
+
+.card {
+  border: none;
+  box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0.5rem 1.5rem rgba(99, 102, 241, 0.15);
+}
+
+.btn-spectra {
+  background: var(--spectra-primary);
+  border-color: var(--spectra-primary);
+  color: white;
+}
+
+.btn-spectra:hover {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: white;
+}
