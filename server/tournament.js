@@ -89,8 +89,20 @@ function getRestBlockForDate(dateIndex, numBlocks) {
 }
 
 /**
- * Por cancha: N jugadores (múltiplo de 4). Un bloque de 4 descansa (solo si hay 2+ bloques), cada otro bloque = 1 partido (1-2 vs 3-4).
- * Con 4 jugadores (1 bloque) no hay descanso: se juega 1 partido.
+ * Rotación de parejas: cada jugador juega 1 set con cada uno de los otros 3.
+ * Con [a,b,c,d]: Set 0: (a,b) vs (c,d), Set 1: (a,c) vs (b,d), Set 2: (a,d) vs (b,c)
+ */
+function getRotatedPairsForBlock(a, b, c, d) {
+  return [
+    { pair1: [a, b], pair2: [c, d] },
+    { pair1: [a, c], pair2: [b, d] },
+    { pair1: [a, d], pair2: [b, c] },
+  ]
+}
+
+/**
+ * Por cancha: N jugadores (múltiplo de 4). Un bloque de 4 descansa (solo si hay 2+ bloques), cada otro bloque = 1 partido.
+ * Cada partido tiene 3 sets con rotación de parejas: cada jugador juega 1 set con cada uno de los otros 3.
  */
 function generateMatchesForCourt(courtPlayers, dateIndex, courtIndex) {
   const safe = (courtPlayers || []).filter((p) => p != null && p.id != null)
@@ -106,17 +118,19 @@ function generateMatchesForCourt(courtPlayers, dateIndex, courtIndex) {
     const c = safe[base + 2]?.id
     const d = safe[base + 3]?.id
     if (a == null || b == null || c == null || d == null) continue
+    const rotated = getRotatedPairsForBlock(a, b, c, d)
     matches.push({
       id: `date${dateIndex + 1}-c${courtIndex}-b${block}`,
       courtIndex,
       blockIndex: block,
       pair1: [a, b],
       pair2: [c, d],
-      sets: [
-        { pair1Games: 0, pair2Games: 0 },
-        { pair1Games: 0, pair2Games: 0 },
-        { pair1Games: 0, pair2Games: 0 },
-      ],
+      sets: rotated.map(({ pair1, pair2 }) => ({
+        pair1,
+        pair2,
+        pair1Games: 0,
+        pair2Games: 0,
+      })),
       completed: false,
     })
   }
@@ -219,7 +233,13 @@ function setSetScore(matchId, setIndex, pair1Games, pair2Games) {
   const match = getMatchById(dateData, matchId)
   if (!match) throw new Error('Partido no encontrado')
   if (setIndex < 0 || setIndex >= SETS_PER_MATCH) throw new Error('Set inválido')
-  match.sets[setIndex] = { pair1Games: Number(pair1Games), pair2Games: Number(pair2Games) }
+  const existing = match.sets[setIndex] || {}
+  match.sets[setIndex] = {
+    pair1: existing.pair1,
+    pair2: existing.pair2,
+    pair1Games: Number(pair1Games),
+    pair2Games: Number(pair2Games),
+  }
   return match
 }
 
@@ -235,29 +255,29 @@ function completeMatch(matchId) {
     throw new Error(`Deben descansar antes de jugar de nuevo: ${needRest.join(', ')}. Completá otro partido primero.`)
   }
 
-  const [pair1Sets, pair2Sets] = match.sets.reduce(
-    (acc, set) => {
-      if (set.pair1Games > set.pair2Games) acc[0]++
-      else if (set.pair2Games > set.pair1Games) acc[1]++
-      return acc
-    },
-    [0, 0]
-  )
-  const pair1Games = match.sets.reduce((s, x) => s + x.pair1Games, 0)
-  const pair2Games = match.sets.reduce((s, x) => s + x.pair2Games, 0)
+  const allPlayerIds = [...new Set([...(match.pair1 || []), ...(match.pair2 || [])])]
 
-  ;[...match.pair1, ...match.pair2].forEach((id) => {
+  allPlayerIds.forEach((id) => {
     const p = state.players.find((x) => x.id === id)
-    if (p) {
-      if (match.pair1.includes(id)) {
-        p.gamesInDate += pair1Games
-        p.setsWonInDate += pair1Sets
+    if (p) p.matchesPlayedInDate++
+  })
+
+  match.sets.forEach((set) => {
+    const pair1 = set.pair1 || match.pair1 || []
+    const pair2 = set.pair2 || match.pair2 || []
+    const p1Won = set.pair1Games > set.pair2Games
+    const p2Won = set.pair2Games > set.pair1Games
+    ;[...pair1, ...pair2].forEach((id) => {
+      const p = state.players.find((x) => x.id === id)
+      if (!p) return
+      if (pair1.includes(id)) {
+        p.gamesInDate += set.pair1Games ?? 0
+        if (p1Won) p.setsWonInDate++
       } else {
-        p.gamesInDate += pair2Games
-        p.setsWonInDate += pair2Sets
+        p.gamesInDate += set.pair2Games ?? 0
+        if (p2Won) p.setsWonInDate++
       }
-      p.matchesPlayedInDate++
-    }
+    })
   })
 
   match.completed = true

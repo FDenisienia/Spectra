@@ -51,44 +51,29 @@ export default function MatchCard({ tournamentId, match, players, onUpdate, play
 
   if (match.completed) {
     const sets = match.sets || []
-    const [p1Sets, p2Sets] = sets.reduce(
-      (acc, set) => {
-        if (set.pair1Games > set.pair2Games) acc[0]++
-        else if (set.pair2Games > set.pair1Games) acc[1]++
-        return acc
-      },
-      [0, 0]
-    )
     return (
       <Card className="mb-3 border-success">
         <Card.Body className="py-2">
-          <Row className="align-items-center small">
-            <Col>
-              <PairNames pairIds={match.pair1} players={players} />
-            </Col>
-            <Col className="text-center">
-              <Badge bg="secondary">
-                {p1Sets} sets — {sets.reduce((s, x) => s + (x.pair1Games ?? 0), 0)} games
-              </Badge>
-              <span className="mx-2">vs</span>
-              <Badge bg="secondary">
-                {p2Sets} sets — {sets.reduce((s, x) => s + (x.pair2Games ?? 0), 0)} games
-              </Badge>
-            </Col>
-            <Col className="text-end">
-              <PairNames pairIds={match.pair2} players={players} />
-            </Col>
-          </Row>
-          {sets.length > 0 && (
-            <div className="text-center mt-2 text-muted small">
-              <span className="me-2">Detalle sets:</span>
-              {sets.map((set, i) => (
-                <span key={i} className="me-2">
-                  Set {i + 1}: <strong>{set.pair1Games ?? 0}</strong>-<strong>{set.pair2Games ?? 0}</strong>
-                </span>
-              ))}
-            </div>
-          )}
+          <div className="text-center mb-2 small">
+            <Badge bg="success">Bloque finalizado — cada jugador jugó 1 set con cada persona</Badge>
+          </div>
+          {sets.map((set, i) => {
+            const pair1 = set.pair1 || match.pair1
+            const pair2 = set.pair2 || match.pair2
+            return (
+              <Row key={i} className="align-items-center small mb-1 py-1 border-bottom">
+                <Col>
+                  <PairNames pairIds={pair1} players={players} />
+                </Col>
+                <Col className="text-center">
+                  <strong>{set.pair1Games ?? 0}</strong> - <strong>{set.pair2Games ?? 0}</strong>
+                </Col>
+                <Col className="text-end">
+                  <PairNames pairIds={pair2} players={players} />
+                </Col>
+              </Row>
+            )
+          })}
           <div className="text-center mt-1">
             <Badge bg="success">Partido finalizado</Badge>
           </div>
@@ -97,18 +82,21 @@ export default function MatchCard({ tournamentId, match, players, onUpdate, play
     )
   }
 
+  const setsWithPairs = (match.sets || []).map((s, i) => ({
+    pair1: s.pair1 ?? match.pair1,
+    pair2: s.pair2 ?? match.pair2,
+    setIndex: i,
+  }))
+  while (setsWithPairs.length < 3) {
+    setsWithPairs.push({ pair1: match.pair1, pair2: match.pair2, setIndex: setsWithPairs.length })
+  }
+
   return (
     <Card className="mb-3">
       <Card.Body>
-        <Row className="align-items-center mb-2">
-          <Col>
-            <strong><PairNames pairIds={match.pair1} players={players} /></strong>
-          </Col>
-          <Col className="text-center text-muted">vs</Col>
-          <Col className="text-end">
-            <strong><PairNames pairIds={match.pair2} players={players} /></strong>
-          </Col>
-        </Row>
+        <div className="mb-2 small text-muted">
+          Cada jugador juega 1 set con cada persona del bloque (3 sets rotados)
+        </div>
         {error && (
           <Alert variant="warning" dismissible onClose={() => setError(null)} className="py-2 small">
             {error}
@@ -119,29 +107,44 @@ export default function MatchCard({ tournamentId, match, players, onUpdate, play
             <strong>Descanso:</strong> {playersNeedRest.join(', ')} acaban de jugar. Completá otro partido primero y después este.
           </Alert>
         )}
-        <Row>
-          {[0, 1, 2].map((setIndex) => (
-            <Col key={setIndex} md={4}>
-              <div className="d-flex align-items-center gap-2 mb-2">
+        {[0, 1, 2].map((setIndex) => {
+          const setInfo = setsWithPairs[setIndex] ?? {}
+          const pair1 = setInfo.pair1 ?? match.pair1
+          const pair2 = setInfo.pair2 ?? match.pair2
+          return (
+            <Row key={setIndex} className="mb-2 align-items-center">
+              <Col md={5} className="small">
+                <PairNames pairIds={pair1} players={players} />
+              </Col>
+              <Col md={2} className="d-flex gap-1 justify-content-center">
                 <Form.Control
                   type="number"
                   min={0}
-                  placeholder="Games"
+                  placeholder="0"
+                  size="sm"
+                  className="text-center"
+                  style={{ maxWidth: '60px' }}
                   value={localSets[setIndex]?.p1 ?? ''}
                   onChange={(e) => updateLocalSet(setIndex, 'p1', e.target.value)}
                 />
-                <span className="text-muted">Set {setIndex + 1}</span>
+                <span className="align-self-center">-</span>
                 <Form.Control
                   type="number"
                   min={0}
-                  placeholder="Games"
+                  placeholder="0"
+                  size="sm"
+                  className="text-center"
+                  style={{ maxWidth: '60px' }}
                   value={localSets[setIndex]?.p2 ?? ''}
                   onChange={(e) => updateLocalSet(setIndex, 'p2', e.target.value)}
                 />
-              </div>
-            </Col>
-          ))}
-        </Row>
+              </Col>
+              <Col md={5} className="small text-end">
+                <PairNames pairIds={pair2} players={players} />
+              </Col>
+            </Row>
+          )
+        })}
         <div className="text-end mt-2">
           <Button
             size="sm"
@@ -149,7 +152,7 @@ export default function MatchCard({ tournamentId, match, players, onUpdate, play
             onClick={handleComplete}
             disabled={loading || playersNeedRest.length > 0}
           >
-            {playersNeedRest.length > 0 ? 'Descanso (completá otro partido)' : 'Finalizar partido (3 sets)'}
+            {playersNeedRest.length > 0 ? 'Descanso (completá otro partido)' : 'Finalizar bloque (3 sets)'}
           </Button>
         </div>
       </Card.Body>
