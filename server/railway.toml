@@ -1,0 +1,11 @@
+# Railway: desplegar solo esta carpeta (server) como servicio.
+# En el dashboard de Railway, configurá "Root Directory" = server.
+# Build y start se toman de package.json (npm install + npm start).
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
