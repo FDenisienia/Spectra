@@ -64,6 +64,46 @@ Si Railway te da otra URL o creás un nuevo servicio:
 
 ---
 
-## 5. CORS
+## 5. La web no se actualiza después de un push
+
+**Netlify (frontend):**
+
+1. **Trigger deploy con cache limpio:** En Netlify → tu sitio → **Deploys** → **Trigger deploy** → **Clear cache and deploy site**. Así se fuerza un build nuevo y se invalida la caché.
+2. **Comprobar que el deploy es del último commit:** En **Deploys** mirá que el commit que se desplegó sea el mismo que en GitHub (hash del commit).
+3. **Rama correcta:** En **Site settings** → **Build & deploy** → **Continuous deployment** → **Branch to deploy** debe ser `main` (o la rama que uses).
+4. **En el navegador:** Probá en ventana privada o con **Ctrl+Shift+R** (recarga forzada) para evitar caché local.
+
+**Railway (backend):**
+
+1. En el proyecto → tu servicio → **Deployments**. Si no hay uno nuevo, usá **Redeploy** o **Deploy**.
+2. En **Settings** del servicio, confirmá **Root Directory:** `server` y que el repo/rama sea el correcto.
+
+---
+
+## 6. Railway no despliega en cada push (causas habituales)
+
+Si hacés push a GitHub y en Railway no aparece un deploy nuevo:
+
+1. **Revisar la rama**
+   - En Railway → tu servicio → **Settings** → **Source**.
+   - Debe estar conectado al repo correcto y a la rama a la que hacés push (normalmente `main`). Si dice `master` y vos pusheás a `main`, no va a desplegar.
+
+2. **Reconectar el repo (refrescar webhook)**
+   - **Settings** del servicio → **Source** → **Disconnect** y volvé a **Connect Repo** con el mismo repo y rama.
+   - A veces el webhook de GitHub se pierde o deja de avisar; reconectar suele arreglarlo.
+
+3. **Root Directory = `server`**
+   - Si **Root Directory** está vacío o en otra cosa, Railway construye desde la raíz del repo. Ahí no está el `package.json` del backend (está en `server/`), así que el build puede fallar o desplegar otra cosa.
+   - Debe decir exactamente: `server`.
+
+4. **Watch Paths (si existe la opción)**
+   - En algunos planes Railway permite “Watch Paths”: solo despliega si cambian ciertas carpetas. Si tenés algo así, asegurate de que incluya `server` (o dejalo vacío para desplegar en todo push).
+
+5. **Probar con Redeploy**
+   - **Deployments** → los tres puntos del último deploy → **Redeploy**. Si eso sí actualiza el servicio, el problema es que no se dispara el deploy automático (webhook/rama). Si ni el redeploy muestra cambios, el problema es otro (por ejemplo Root Directory).
+
+---
+
+## 7. CORS
 
 El servidor usa `cors()` sin restricción de origen, así que el frontend en Netlify puede llamar al backend en Railway sin cambiar nada. Si más adelante querés limitar orígenes, podés configurar CORS en `server/index.js` para permitir solo tu dominio de Netlify.

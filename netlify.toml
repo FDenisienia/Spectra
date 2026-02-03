@@ -4,6 +4,12 @@
   command = "npm run build"
   publish = "dist"
 
+# Evitar caché del HTML para que cada deploy se vea al instante (los .js/.css con hash sí pueden cachearse)
+[[headers]]
+  for    = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
 # SPA: todas las rutas sirven index.html
 [[redirects]]
   from    = "/*"

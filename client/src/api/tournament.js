@@ -1,6 +1,6 @@
 // En producción (Netlify) usar VITE_API_URL; en dev usa proxy /api → localhost:3000
 const BASE = import.meta.env.VITE_API_URL || '/api'
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
   console.log('[Spectra] API base:', BASE)
 }
 
@@ -116,6 +116,17 @@ export async function setMatchScore(tournamentId, matchId, setIndex, pair1Games,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ setIndex, pair1Games, pair2Games }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** Envía los 3 sets de un partido en una sola petición (más rápido). */
+export async function setMatchScores(tournamentId, matchId, sets) {
+  const res = await fetch(`${tournamentBase(tournamentId)}/match/${matchId}/scores`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sets }),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()

@@ -8,6 +8,7 @@ import {
   generateDateMatches,
   getCurrentDateData,
   setSetScore,
+  setMatchScores,
   completeMatch,
   completeDate,
   allMatchesInDateComplete,
@@ -266,6 +267,20 @@ app.post('/api/tournament/:id/match/:matchId/score', (req, res) => {
     const { setIndex, pair1Games, pair2Games } = req.body
     const data = withTournament(req.params.id, () => {
       setSetScore(matchId, setIndex, pair1Games, pair2Games)
+      return getState()
+    })
+    res.json(data)
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.post('/api/tournament/:id/match/:matchId/scores', (req, res) => {
+  try {
+    const { matchId } = req.params
+    const { sets } = req.body || {}
+    const data = withTournament(req.params.id, () => {
+      setMatchScores(matchId, sets)
       return getState()
     })
     res.json(data)

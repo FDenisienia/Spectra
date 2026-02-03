@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { Container, Navbar, Nav, Alert, Spinner, Form, Button } from 'react-bootstrap'
 import * as api from '../api/tournament'
@@ -19,6 +19,7 @@ export default function Tournament() {
   const [actionLoading, setActionLoading] = useState(false)
   const [canCompleteDate, setCanCompleteDate] = useState(false)
   const [viewingDate, setViewingDate] = useState(1)
+  const generatingMatchesRef = useRef(false)
 
   const fetchState = useCallback(async () => {
     if (!tournamentId) return
@@ -37,24 +38,52 @@ export default function Tournament() {
     }
   }, [tournamentId])
 
+  // Carga inicial: un solo request (getTournament devuelve name + state)
   useEffect(() => {
-    if (tournamentId) fetchState()
-    else setLoading(false)
-  }, [tournamentId, fetchState])
+    if (!tournamentId) {
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    api
+      .getTournament(tournamentId)
+      .then((t) => {
+        if (cancelled) return
+        setTournamentName(t.name ?? '')
+        setState(t.state ?? null)
+        setError(null)
+        if (t.state?.status === 'date' || t.state?.status === 'date_complete') {
+          return api.canCompleteDate(tournamentId).then((can) => {
+            if (!cancelled) setCanCompleteDate(can)
+          })
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e?.message ?? String(e))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [tournamentId])
 
+  // Auto-generar partidos si la fecha actual no tiene (solo una vez por estado)
   useEffect(() => {
     if (!tournamentId || !state || state.status !== 'date' || !state.players?.length) return
     const dateData = state.dates?.[state.currentDate - 1]
     const needsMatches = !dateData || !dateData.matches || dateData.matches.length === 0
-    if (needsMatches) {
-      api.startDate(tournamentId)
-        .then(({ state: nextState }) => {
-          setState(nextState)
-          api.canCompleteDate(tournamentId).then(setCanCompleteDate)
-        })
-        .catch((e) => setError(e?.message ?? String(e)))
-    }
-  }, [tournamentId, state?.status, state?.currentDate, state?.dates, state?.players?.length])
+    if (!needsMatches || generatingMatchesRef.current) return
+    generatingMatchesRef.current = true
+    api
+      .startDate(tournamentId)
+      .then(({ state: nextState }) => {
+        setState(nextState)
+        return api.canCompleteDate(tournamentId).then(setCanCompleteDate)
+      })
+      .catch((e) => setError(e?.message ?? String(e)))
+      .finally(() => { generatingMatchesRef.current = false })
+  }, [tournamentId, state?.status, state?.currentDate, state?.players?.length])
 
   const handleConfig = async (numCourts, numPlayers) => {
     setActionLoading(true)
@@ -143,11 +172,6 @@ export default function Tournament() {
   }, [state?.currentDate, datesCount])
 
   const viewingDateData = state?.dates?.[viewingDate - 1] ?? null
-
-  useEffect(() => {
-    if (!tournamentId) return
-    api.getTournament(tournamentId).then((t) => setTournamentName(t.name)).catch(() => {})
-  }, [tournamentId])
 
   const handleStartEditName = () => {
     setEditNameValue(tournamentName || '')

@@ -150,7 +150,7 @@ export default function RoundView({
 
   if (!dateData) return null
 
-  const qualifyingDates = state.config?.qualifyingDates ?? 3
+  const qualifyingDates = state.config?.qualifyingDates ?? 1
   const isQualifyingPhase = dateLabel < qualifyingDates
   const dateJustCompletedQualifying = dateData?.isQualifying === true
 

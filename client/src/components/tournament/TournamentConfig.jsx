@@ -12,13 +12,13 @@ export default function TournamentConfig({ onSuccess, loading, error }) {
   const handleSubmit = (e) => {
     e.preventDefault()
     setValidationError('')
-    const courts = Number(numCourts)
-    const players = Number(numPlayers)
-    if (numCourts === '' || numCourts === null || !Number.isInteger(courts) || courts < 1) {
+    const courts = parseInt(String(numCourts), 10)
+    const players = parseInt(String(numPlayers), 10)
+    if (numCourts === '' || numCourts === null || Number.isNaN(courts) || !Number.isInteger(courts) || courts < 1) {
       setValidationError('Seleccioná la cantidad de canchas.')
       return
     }
-    if (!Number.isInteger(players) || players < courts * 4) {
+    if (Number.isNaN(players) || !Number.isInteger(players) || players < courts * 4) {
       setValidationError(`Mínimo ${courts * 4} jugadores (4 por cancha).`)
       return
     }

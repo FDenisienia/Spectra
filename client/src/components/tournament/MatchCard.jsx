@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Card, Row, Col, Form, Button, Badge, Alert } from 'react-bootstrap'
-import { setMatchScore, completeMatch } from '../../api/tournament'
+import { setMatchScores, completeMatch } from '../../api/tournament'
 
 function PairNames({ pairIds, players }) {
   const names = (pairIds || []).map((id) => players.find((p) => p.id === id)?.name || id).filter(Boolean)
@@ -36,10 +36,11 @@ export default function MatchCard({ tournamentId, match, players, onUpdate, play
     if (playersNeedRest.length > 0) return
     setLoading(true)
     try {
-      for (let setIndex = 0; setIndex < 3; setIndex++) {
-        const s = localSets[setIndex] || { p1: 0, p2: 0 }
-        await setMatchScore(tournamentId, match.id, setIndex, s.p1, s.p2)
-      }
+      const sets = [0, 1, 2].map((i) => {
+        const s = localSets[i] || { p1: 0, p2: 0 }
+        return { pair1Games: s.p1, pair2Games: s.p2 }
+      })
+      await setMatchScores(tournamentId, match.id, sets)
       await completeMatch(tournamentId, match.id)
       onUpdate()
     } catch (e) {

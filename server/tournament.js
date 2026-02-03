@@ -243,6 +243,16 @@ function setSetScore(matchId, setIndex, pair1Games, pair2Games) {
   return match
 }
 
+/** Aplica todos los sets de un partido en una sola operación (menos round-trips). */
+function setMatchScores(matchId, sets) {
+  if (!Array.isArray(sets) || sets.length === 0) throw new Error('Se requieren los resultados de los sets')
+  for (let i = 0; i < Math.min(sets.length, SETS_PER_MATCH); i++) {
+    const s = sets[i]
+    setSetScore(matchId, i, s.pair1Games ?? 0, s.pair2Games ?? 0)
+  }
+  return getMatchById(getCurrentDateData(), matchId)
+}
+
 function completeMatch(matchId) {
   const dateData = getCurrentDateData()
   if (!dateData) throw new Error('No hay fecha en curso')
@@ -474,6 +484,7 @@ export {
   generateDateMatches,
   getCurrentDateData,
   setSetScore,
+  setMatchScores,
   completeMatch,
   completeDate,
   allMatchesInDateComplete,

@@ -14,36 +14,31 @@ export default function Home() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newTournamentName, setNewTournamentName] = useState('')
 
-  const loadTournaments = async () => {
-    try {
-      const list = await api.getTournaments()
-      setTournaments(list)
-      setError(null)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadGlobalRanking = async () => {
-    try {
-      const list = await api.getGlobalRanking()
-      setGlobalRanking(list)
-    } catch (e) {
-      // no bloquear la página si falla el ranking
-    } finally {
-      setLoadingRanking(false)
-    }
-  }
-
   useEffect(() => {
-    loadTournaments()
+    let cancelled = false
+    const run = async () => {
+      try {
+        const [list, ranking] = await Promise.all([
+          api.getTournaments(),
+          api.getGlobalRanking().catch(() => []),
+        ])
+        if (!cancelled) {
+          setTournaments(list)
+          setGlobalRanking(Array.isArray(ranking) ? ranking : [])
+          setError(null)
+        }
+      } catch (e) {
+        if (!cancelled) setError(e.message)
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+          setLoadingRanking(false)
+        }
+      }
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
-
-  useEffect(() => {
-    loadGlobalRanking()
-  }, [tournaments.length])
 
   const handleOpenCreateModal = () => {
     setNewTournamentName('')
@@ -74,6 +69,7 @@ export default function Home() {
     try {
       await api.deleteTournament(id)
       setTournaments((prev) => prev.filter((t) => t.id !== id))
+      api.getGlobalRanking().then(setGlobalRanking).catch(() => {})
     } catch (err) {
       setError(err.message)
     }
