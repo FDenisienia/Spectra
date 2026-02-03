@@ -380,7 +380,16 @@ function completeDate() {
   })
 
   const byCourt = getRankingForDate()
-  dateData.rankingAtEnd = { byCourt }
+  // Registro de la fecha: sets y games de cada jugador en esta fecha (para mostrar al ver fechas pasadas)
+  const allPlayersThisDate = []
+  for (let c = 0; c < state.config.numCourts; c++) {
+    (byCourt[c] || []).forEach((p) => allPlayersThisDate.push({ ...p }))
+  }
+  const globalForDate = [...allPlayersThisDate].sort((a, b) => {
+    if ((b.setsWonInDate ?? 0) !== (a.setsWonInDate ?? 0)) return (b.setsWonInDate ?? 0) - (a.setsWonInDate ?? 0)
+    return (b.gamesInDate ?? 0) - (a.gamesInDate ?? 0)
+  }).map((p, i) => ({ ...p, globalPosition: i + 1 }))
+  dateData.rankingAtEnd = { byCourt, global: globalForDate }
   const numCourts = state.config.numCourts
   const isQualifying = state.currentDate < QUALIFYING_DATES
   dateData.isQualifying = isQualifying

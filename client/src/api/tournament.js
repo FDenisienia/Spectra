@@ -1,5 +1,8 @@
 // En producción (Netlify) usar VITE_API_URL; en dev usa proxy /api → localhost:3000
 const BASE = import.meta.env.VITE_API_URL || '/api'
+if (typeof window !== 'undefined') {
+  console.log('[Spectra] API base:', BASE)
+}
 
 async function parseError(res) {
   const text = await res.text()

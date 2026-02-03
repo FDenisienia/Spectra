@@ -56,6 +56,47 @@ export default function RoundView({
     return computeTotalRanking(players, dateData, state.config.numCourts)
   }, [state?.players, state?.config, dateData])
 
+  // Ranking de esta fecha solo (registro): al ver una fecha pasada/completada, usar snapshot
+  const dateOnlyRanking = useMemo(() => {
+    if (!dateData?.rankingAtEnd?.byCourt) return null
+    const byCourt = dateData.rankingAtEnd.byCourt
+    if (dateData.rankingAtEnd.global && dateData.rankingAtEnd.global.length > 0) {
+      return { byCourt, global: dateData.rankingAtEnd.global }
+    }
+    const all = []
+    Object.values(byCourt).forEach((arr) => arr.forEach((p) => all.push({ ...p })))
+    const global = [...all].sort((a, b) => {
+      const aS = a.setsWonInDate ?? 0
+      const bS = b.setsWonInDate ?? 0
+      if (bS !== aS) return bS - aS
+      return (b.gamesInDate ?? 0) - (a.gamesInDate ?? 0)
+    }).map((p, i) => ({ ...p, globalPosition: i + 1 }))
+    return { byCourt, global }
+  }, [dateData?.rankingAtEnd])
+
+  // Por cancha: ranking con sets/games de ESTA FECHA (0 al iniciar nueva fecha). Si es fecha pasada, usar snapshot.
+  const courtRankingThisDate = useMemo(() => {
+    const numCourts = state?.config?.numCourts ?? 0
+    const out = {}
+    if (dateData?.completed && dateOnlyRanking?.byCourt) {
+      for (let c = 0; c < numCourts; c++) out[c] = dateOnlyRanking.byCourt[c] || []
+      return out
+    }
+    const players = state?.players || []
+    for (let c = 0; c < numCourts; c++) {
+      const courtPlayers = players
+        .filter((p) => p != null && p.courtIndex === c)
+        .map((p) => ({ ...p }))
+        .sort((a, b) => {
+          if ((b.setsWonInDate ?? 0) !== (a.setsWonInDate ?? 0)) return (b.setsWonInDate ?? 0) - (a.setsWonInDate ?? 0)
+          return (b.gamesInDate ?? 0) - (a.gamesInDate ?? 0)
+        })
+        .map((p, i) => ({ ...p, positionInCourt: i + 1 }))
+      out[c] = courtPlayers
+    }
+    return out
+  }, [state?.players, state?.config?.numCourts, dateData?.completed, dateOnlyRanking?.byCourt])
+
   const allMatches = useMemo(() => dateData?.matches ?? [], [dateData?.matches])
 
   const matchesByCourt = useMemo(() => {
@@ -149,8 +190,43 @@ export default function RoundView({
 
       <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="mb-3">
         <Tab eventKey="total" title="Total">
+          {dateData.completed && dateOnlyRanking?.global?.length > 0 && (
+            <Card className="mb-3 border-secondary">
+              <Card.Header className="bg-light">Ranking al cierre de Fecha {dateLabel} (registro de esta fecha)</Card.Header>
+              <Card.Body className="p-0">
+                <Table responsive hover size="sm">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Jugador</th>
+                      <th>Cancha</th>
+                      <th>Partidos</th>
+                      <th>Sets</th>
+                      <th>Games</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dateOnlyRanking.global.map((p) => (
+                      <tr
+                        key={p.id}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => openPlayerCard(state.players.find((x) => x.id === p.id) ?? p)}
+                      >
+                        <td>{p.globalPosition}</td>
+                        <td>{p.name}</td>
+                        <td>{p.courtIndex != null ? p.courtIndex + 1 : '—'}</td>
+                        <td>{p.matchesPlayedInDate ?? 0}</td>
+                        <td>{p.setsWonInDate ?? 0}</td>
+                        <td>{p.gamesInDate ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </Card.Body>
+            </Card>
+          )}
           <Card className="mb-3">
-            <Card.Header>Ranking general (total del torneo)</Card.Header>
+            <Card.Header>Ranking general (suma de todas las fechas)</Card.Header>
             <Card.Body className="p-0">
               <Table responsive hover size="sm">
                 <thead>
@@ -259,30 +335,30 @@ export default function RoundView({
               </Alert>
             )}
             <Card className="mb-3">
-              <Card.Header>Cancha {c + 1} — {state.config.numPlayers / state.config.numCourts} jugadores (ranking total)</Card.Header>
+              <Card.Header>Cancha {c + 1} — {state.config.numPlayers / state.config.numCourts} jugadores (esta fecha)</Card.Header>
               <Card.Body className="p-0">
                 <Table responsive hover size="sm">
                   <thead>
                     <tr>
                       <th>#</th>
                       <th>Jugador</th>
-                      <th>Partidos (total)</th>
+                      <th>Partidos</th>
                       <th>Sets</th>
                       <th>Games</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(totalRanking.byCourt[c] || []).map((p) => (
+                    {(courtRankingThisDate[c] || []).map((p) => (
                       <tr
                         key={p.id}
                         style={{ cursor: 'pointer' }}
-                        onClick={() => openPlayerCard(p)}
+                        onClick={() => openPlayerCard(state.players.find((x) => x.id === p.id) ?? p)}
                       >
                         <td>{p.positionInCourt}</td>
                         <td>{p.name}</td>
-                        <td>{p.totalMatches ?? 0}</td>
-                        <td>{p.totalSets ?? 0}</td>
-                        <td>{p.totalGames ?? 0}</td>
+                        <td>{p.matchesPlayedInDate ?? 0}</td>
+                        <td>{p.setsWonInDate ?? 0}</td>
+                        <td>{p.gamesInDate ?? 0}</td>
                       </tr>
                     ))}
                   </tbody>
