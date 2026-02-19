@@ -45,6 +45,27 @@ export function requireAuth(req, res, next) {
 }
 
 /**
+ * Cambia la contraseña del admin autenticado.
+ * @param {number} userId - ID del admin
+ * @param {string} currentPassword - contraseña actual
+ * @param {string} newPassword - nueva contraseña
+ */
+export async function changePassword(userId, currentPassword, newPassword) {
+  const [rows] = await pool.query(
+    'SELECT password_hash FROM admin_user WHERE id = ? LIMIT 1',
+    [userId]
+  )
+  if (rows.length === 0) throw new Error('Usuario no encontrado')
+  const ok = await bcrypt.compare(currentPassword, rows[0].password_hash)
+  if (!ok) throw new Error('Contraseña actual incorrecta')
+  if (!newPassword || newPassword.length < 6) {
+    throw new Error('La nueva contraseña debe tener al menos 6 caracteres')
+  }
+  const hash = await bcrypt.hash(newPassword, 10)
+  await pool.query('UPDATE admin_user SET password_hash = ? WHERE id = ?', [hash, userId])
+}
+
+/**
  * Opcional: si hay token válido, pone req.auth; si no, sigue sin él.
  */
 export function optionalAuth(req, res, next) {

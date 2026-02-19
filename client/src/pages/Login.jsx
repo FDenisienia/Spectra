@@ -47,7 +47,7 @@ export default function Login() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
+                  placeholder="spectra_admin"
                   autoComplete="username"
                   autoFocus
                 />

@@ -22,7 +22,7 @@ import { ensureSchema, pool } from './db/index.js'
 import { seedAdmin } from './db/seedAdmin.js'
 import * as tournamentsRepo from './db/repo/tournaments.js'
 import * as leagueRepo from './db/repo/league.js'
-import { login, requireAuth } from './auth.js'
+import { login, requireAuth, changePassword } from './auth.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -76,6 +76,19 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ username: req.auth.username })
+})
+
+app.patch('/api/auth/change-password', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {}
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Contraseña actual y nueva contraseña requeridas' })
+    }
+    await changePassword(Number(req.auth.sub), currentPassword, newPassword)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
 })
 
 // --- Ranking global (solo pádel: jugadores entre torneos) ---

@@ -26,6 +26,22 @@ export async function login(username, password) {
   return data
 }
 
+export async function changePassword(currentPassword, newPassword) {
+  const res = await fetch(`${BASE}/auth/change-password`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+    },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || 'Error al cambiar contraseña')
+  }
+  return res.json()
+}
+
 export async function getMe() {
   const token = getStoredToken()
   if (!token) return null

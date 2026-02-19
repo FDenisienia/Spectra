@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Container, Navbar, Nav, Button, Card, ListGroup, Spinner, Alert, Modal, Form } from 'react-bootstrap'
 import * as api from '../api/tournament'
-import { logout } from '../api/auth'
+import { logout, changePassword } from '../api/auth'
 
 const SPORT_LABEL = { padel: 'Pádel', futbol: 'Fútbol', hockey: 'Hockey' }
 const MODALITY_LABEL = { escalera: 'Escalera', grupo: 'Fase de Grupos', liga: 'Liga' }
@@ -32,6 +32,9 @@ export default function AdminDashboard() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' })
+  const [changingPassword, setChangingPassword] = useState(false)
   const [form, setForm] = useState({
     name: '',
     sport: 'futbol',
@@ -103,6 +106,29 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault()
+    if (passwordForm.new !== passwordForm.confirm) {
+      setError('La nueva contraseña y la confirmación no coinciden')
+      return
+    }
+    if (passwordForm.new.length < 6) {
+      setError('La nueva contraseña debe tener al menos 6 caracteres')
+      return
+    }
+    setChangingPassword(true)
+    setError(null)
+    try {
+      await changePassword(passwordForm.current, passwordForm.new)
+      setShowPasswordModal(false)
+      setPasswordForm({ current: '', new: '', confirm: '' })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
   const handleDelete = async (e, id, name) => {
     e.preventDefault()
     e.stopPropagation()
@@ -132,6 +158,9 @@ export default function AdminDashboard() {
           <Navbar.Collapse id="admin-nav">
             <Nav className="ms-auto">
               <Nav.Link as={Link} to="/">Ver web pública</Nav.Link>
+              <Button variant="outline-light" size="sm" onClick={() => { setPasswordForm({ current: '', new: '', confirm: '' }); setShowPasswordModal(true); }}>
+                Cambiar contraseña
+              </Button>
               <Button variant="outline-light" size="sm" className="ms-2" onClick={() => { logout(); navigate('/admin/login'); }}>
                 Cerrar sesión
               </Button>
@@ -284,6 +313,56 @@ export default function AdminDashboard() {
               </Button>
               <Button variant="primary" type="submit" disabled={creating}>
                 {creating ? 'Creando…' : 'Crear'}
+              </Button>
+            </Modal.Footer>
+          </Form>
+        </Modal>
+
+        <Modal show={showPasswordModal} onHide={() => !changingPassword && setShowPasswordModal(false)} centered>
+          <Modal.Header closeButton>
+            <Modal.Title>Cambiar contraseña</Modal.Title>
+          </Modal.Header>
+          <Form onSubmit={handleChangePassword}>
+            <Modal.Body>
+              <Form.Group className="mb-3">
+                <Form.Label>Contraseña actual</Form.Label>
+                <Form.Control
+                  type="password"
+                  value={passwordForm.current}
+                  onChange={(e) => setPasswordForm((f) => ({ ...f, current: e.target.value }))}
+                  placeholder="Contraseña actual"
+                  required
+                />
+              </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>Nueva contraseña</Form.Label>
+                <Form.Control
+                  type="password"
+                  value={passwordForm.new}
+                  onChange={(e) => setPasswordForm((f) => ({ ...f, new: e.target.value }))}
+                  placeholder="Mínimo 6 caracteres"
+                  minLength={6}
+                  required
+                />
+              </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>Confirmar nueva contraseña</Form.Label>
+                <Form.Control
+                  type="password"
+                  value={passwordForm.confirm}
+                  onChange={(e) => setPasswordForm((f) => ({ ...f, confirm: e.target.value }))}
+                  placeholder="Repetir nueva contraseña"
+                  minLength={6}
+                  required
+                />
+              </Form.Group>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={() => setShowPasswordModal(false)} disabled={changingPassword}>
+                Cancelar
+              </Button>
+              <Button variant="primary" type="submit" disabled={changingPassword}>
+                {changingPassword ? 'Guardando…' : 'Guardar'}
               </Button>
             </Modal.Footer>
           </Form>

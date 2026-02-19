@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { pool } from './index.js'
 
-const DEFAULT_USER = 'admin'
+const DEFAULT_USER = 'spectra_admin'
 const DEFAULT_PASSWORD = 'admin123'
 
 /**
