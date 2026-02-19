@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node -r dotenv/config index.js",
-    "dev": "node -r dotenv/config --watch index.js"
+    "dev": "node -r dotenv/config --watch index.js",
+    "migrate": "node migrate.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

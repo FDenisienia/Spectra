@@ -89,7 +89,19 @@ Si usás un MySQL fuera de Railway (PlanetScale, Aiven, hosting propio):
 
 ### Migraciones / schema inicial
 
-El servidor Spectra ejecuta `ensureSchema` al arrancar. Asegurate de que el usuario MySQL tenga permisos para crear tablas en la base indicada.
+El servidor Spectra ejecuta `ensureSchema` al arrancar. Si necesitás crear las tablas manualmente (por ejemplo, ya conectado por SSH a Railway):
+
+```bash
+cd server && node migrate.js
+```
+
+O desde el directorio `server/`:
+
+```bash
+node migrate.js
+```
+
+Asegurate de que el usuario MySQL tenga permisos para crear tablas en la base indicada.
 
 ---
 
