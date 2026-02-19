@@ -13,7 +13,7 @@
 # Proxy API a Railway (evita CORS: el frontend llama a /api en Netlify, Netlify reenvía a Railway)
 [[redirects]]
   from   = "/api/*"
-  to     = "https://spectra-production-bbdb.up.railway.app/api/:splat"
+  to     = "https://spectra-production-2b6b.up.railway.app/api/:splat"
   status = 200
   force  = true
 
