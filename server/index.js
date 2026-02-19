@@ -922,17 +922,13 @@ app.post('/api/tournament/:id/league/playoff/matches/:matchId/cards', requireAut
 })
 
 // --- Arranque ---
-async function start() {
-  await ensureSchema()
-  await seedAdmin()
-  app.listen(PORT, () => {
-    console.log(`Servidor en http://localhost:${PORT}`)
-    console.log(`API: http://localhost:${PORT}/api/health`)
-    console.log(`Torneos: http://localhost:${PORT}/api/tournaments`)
-  })
-}
-
-start().catch((err) => {
-  console.error('Error al iniciar:', err)
-  process.exit(1)
+// Primero listen (Railway necesita respuesta rápida), luego DB en segundo plano
+app.listen(PORT, () => {
+  console.log(`Servidor en http://localhost:${PORT}`)
+  console.log(`API: http://localhost:${PORT}/api/health`)
+  console.log(`Torneos: http://localhost:${PORT}/api/tournaments`)
+  ensureSchema()
+    .then(() => seedAdmin())
+    .then(() => console.log('[Spectra] Base de datos lista'))
+    .catch((err) => console.error('[Spectra] Error init DB:', err.message))
 })
