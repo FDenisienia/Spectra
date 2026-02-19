@@ -922,8 +922,8 @@ app.post('/api/tournament/:id/league/playoff/matches/:matchId/cards', requireAut
 })
 
 // --- Arranque ---
-// Primero listen (Railway necesita respuesta rápida), luego DB en segundo plano
-app.listen(PORT, () => {
+// Escuchar en 0.0.0.0 (Railway requiere acceso externo); init DB en background
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor en http://localhost:${PORT}`)
   console.log(`API: http://localhost:${PORT}/api/health`)
   console.log(`Torneos: http://localhost:${PORT}/api/tournaments`)
