@@ -27,14 +27,15 @@ import { login, requireAuth, changePassword } from './auth.js'
 const app = express()
 const PORT = process.env.PORT || 3000
 
-// CORS: permitir frontend (Netlify) y desarrollo local
-const frontendUrl = process.env.FRONTEND_URL?.replace(/\/$/, '')
-const corsOptions = {
-  origin: frontendUrl ? [frontendUrl, 'http://localhost:5173', 'http://localhost:3000'] : true,
-  credentials: true,
-  optionsSuccessStatus: 200,
-}
-app.use(cors(corsOptions))
+// CORS: headers manuales + cors() para garantizar compatibilidad
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
+  next()
+})
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }))
 app.use(express.json())
 
 /** Torneo usa sistema de liga (grupos, equipos/parejas, jornadas): futbol, hockey, o padel con modalidad grupo/liga */
