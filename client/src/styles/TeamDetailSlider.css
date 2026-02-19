@@ -1,0 +1,377 @@
+/* Team detail: secciones arriba + slider de contenido */
+
+.team-detail-slider {
+  --slider-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --slider-radius: 14px;
+  --slider-shadow: 0 4px 20px rgba(30, 27, 75, 0.08);
+  --slider-shadow-hover: 0 8px 28px rgba(30, 27, 75, 0.12);
+  --slider-accent: #4338ca;
+  --slider-accent-soft: rgba(67, 56, 202, 0.1);
+}
+
+/* --- Pestañas de sección --- */
+.team-detail-slider .team-detail-sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-radius: var(--slider-radius);
+  padding: 0.5rem;
+  background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  list-style: none;
+  margin: 0;
+  position: relative;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.team-detail-slider .team-detail-sections li {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.team-detail-slider .team-detail-sections .nav-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #475569;
+  background: transparent;
+  transition: color 0.25s var(--slider-ease), transform 0.2s var(--slider-ease), background 0.25s var(--slider-ease);
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+}
+
+.team-detail-slider .team-detail-sections .nav-link:hover {
+  color: var(--slider-accent);
+  background: rgba(255, 255, 255, 0.7);
+  transform: translateY(-1px);
+}
+
+.team-detail-slider .team-detail-sections .nav-link:active {
+  transform: translateY(0);
+}
+
+.team-detail-slider .team-detail-sections .nav-link.active {
+  color: var(--slider-accent);
+  background: #fff;
+  box-shadow: var(--slider-shadow);
+  transform: translateY(-1px);
+}
+
+.team-detail-slider .team-detail-sections .section-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+  transition: transform 0.25s var(--slider-ease);
+}
+
+.team-detail-slider .team-detail-sections .nav-link:hover .section-icon,
+.team-detail-slider .team-detail-sections .nav-link.active .section-icon {
+  transform: scale(1.1);
+}
+
+.team-detail-slider .team-detail-sections .section-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 576px) {
+  .team-detail-slider .team-detail-sections {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 0.5rem;
+  }
+  .team-detail-slider .team-detail-sections::-webkit-scrollbar {
+    display: none;
+  }
+  .team-detail-slider .team-detail-sections li {
+    flex: 0 0 auto;
+  }
+  .team-detail-slider .team-detail-sections .nav-link {
+    white-space: nowrap;
+    padding: 0.65rem 0.9rem;
+  }
+}
+
+/* --- Contenedor del slider --- */
+.team-detail-slider-wrapper {
+  position: relative;
+  min-height: 220px;
+  margin-top: 0.5rem;
+}
+
+.team-detail-slider-track {
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--slider-radius);
+  background: linear-gradient(180deg, #fafbfc 0%, #f1f5f9 100%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: var(--slider-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.team-detail-slider-inner {
+  display: flex;
+  transition: transform 0.45s var(--slider-ease);
+  height: 100%;
+  will-change: transform;
+}
+
+.team-detail-slide {
+  flex: 0 0 100%;
+  width: 100%;
+  min-height: 200px;
+  padding: 0.75rem;
+  box-sizing: border-box;
+}
+
+.team-detail-slide[data-active="true"] .card {
+  animation: team-detail-slide-in 0.4s var(--slider-ease) forwards;
+}
+
+@keyframes team-detail-slide-in {
+  from {
+    opacity: 0.7;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.team-detail-slide .card {
+  height: 100%;
+  min-height: 180px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.3s var(--slider-ease), transform 0.3s var(--slider-ease);
+  overflow: hidden;
+}
+
+.team-detail-slide .card:hover {
+  box-shadow: var(--slider-shadow-hover);
+}
+
+.team-detail-slide .card-body {
+  min-height: 140px;
+}
+
+.team-detail-slide .table tbody tr {
+  transition: background 0.2s var(--slider-ease);
+}
+
+.team-detail-slide .table-hover tbody tr:hover {
+  background: var(--slider-accent-soft);
+}
+
+/* --- Fechas: slider (anterior, actual, próxima) + controles --- */
+.team-detail-dates-slider {
+  width: 100%;
+}
+
+.team-detail-dates-track {
+  width: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.team-detail-dates-inner {
+  display: flex;
+  transition: transform 0.4s var(--slider-ease);
+  height: 100%;
+  will-change: transform;
+}
+
+.team-detail-date-card-wrap {
+  flex: 0 0 100%;
+  width: 100%;
+  min-height: 120px;
+  padding: 0 0.15rem;
+  box-sizing: border-box;
+}
+
+.team-detail-dates-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+}
+
+.team-detail-dates-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--slider-accent);
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: background 0.2s var(--slider-ease), color 0.2s var(--slider-ease), opacity 0.2s;
+}
+
+.team-detail-dates-nav-btn:hover:not(:disabled) {
+  background: var(--slider-accent-soft);
+  color: var(--slider-accent);
+}
+
+.team-detail-dates-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.team-detail-dates-dots {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.team-detail-dates-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: none;
+  background: #cbd5e1;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s var(--slider-ease), transform 0.2s;
+}
+
+.team-detail-dates-dot:hover {
+  background: #94a3b8;
+}
+
+.team-detail-dates-dot.active {
+  background: var(--slider-accent);
+  transform: scale(1.2);
+}
+
+.team-detail-date-card-wrap .card {
+  height: 100%;
+  min-height: 120px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.3s var(--slider-ease);
+}
+
+.team-detail-date-card-wrap .card:hover {
+  box-shadow: var(--slider-shadow);
+}
+
+.team-detail-date-card-wrap .card.border-primary {
+  border-color: var(--slider-accent);
+  box-shadow: 0 0 0 1px var(--slider-accent), 0 2px 12px rgba(67, 56, 202, 0.15);
+}
+
+/* --- Vista responsive: lista por tarjeta en móvil (desglose por equipo) --- */
+.team-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.team-detail-list-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  align-items: baseline;
+  padding: 1rem;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.team-detail-list-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.team-detail-list-value {
+  font-size: 0.9375rem;
+  color: #1e293b;
+}
+
+.team-detail-table.d-none.d-sm-table {
+  width: 100%;
+}
+
+/* Fechas: tarjetas más legibles en móvil */
+.team-detail-slide-dates .team-detail-slide {
+  padding: 0.5rem;
+}
+
+.team-detail-date-card-body {
+  padding: 1rem !important;
+}
+
+@media (min-width: 576px) {
+  .team-detail-date-card-body {
+    padding: 1.25rem !important;
+  }
+}
+
+.team-detail-date-card-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.team-detail-date-card-rival,
+.team-detail-date-card-score {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.team-detail-date-card-meta {
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 575.98px) {
+  .team-detail-slider .team-detail-sections {
+    padding: 0.5rem;
+    gap: 0.25rem;
+  }
+
+  .team-detail-slider .team-detail-sections .nav-link {
+    padding: 0.75rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .team-detail-slider .team-detail-sections .section-icon {
+    font-size: 1.1rem;
+  }
+
+  .team-detail-slide {
+    padding: 0.5rem;
+  }
+
+  .team-detail-date-card-wrap {
+    padding: 0 0.35rem;
+    min-height: 140px;
+  }
+
+  .team-detail-date-card-wrap .card {
+    min-height: 120px;
+  }
+}

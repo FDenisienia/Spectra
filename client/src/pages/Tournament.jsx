@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { Container, Navbar, Nav, Alert, Spinner, Form, Button } from 'react-bootstrap'
+import { Container, Navbar, Nav, Alert, Spinner, Form, Button, Card } from 'react-bootstrap'
 import * as api from '../api/tournament'
 import TournamentConfig from '../components/tournament/TournamentConfig'
 import TournamentPlayers from '../components/tournament/TournamentPlayers'
 import RoundView from '../components/tournament/RoundView'
 
-export default function Tournament() {
+export default function Tournament({ isAdmin = false }) {
   const { id: tournamentId } = useParams()
   const navigate = useNavigate()
   const [state, setState] = useState(null)
   const [tournamentName, setTournamentName] = useState('')
+  const [tournamentRules, setTournamentRules] = useState('')
   const [editingName, setEditingName] = useState(false)
   const [editNameValue, setEditNameValue] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -51,6 +52,7 @@ export default function Tournament() {
       .then((t) => {
         if (cancelled) return
         setTournamentName(t.name ?? '')
+        setTournamentRules(t.rules ?? '')
         setState(t.state ?? null)
         setError(null)
         if (t.state?.status === 'date' || t.state?.status === 'date_complete') {
@@ -68,9 +70,9 @@ export default function Tournament() {
     return () => { cancelled = true }
   }, [tournamentId])
 
-  // Auto-generar partidos si la fecha actual no tiene (solo una vez por estado)
+  // Auto-generar partidos si la fecha actual no tiene (solo una vez por estado). Solo en modo admin.
   useEffect(() => {
-    if (!tournamentId || !state || state.status !== 'date' || !state.players?.length) return
+    if (!isAdmin || !tournamentId || !state || state.status !== 'date' || !state.players?.length) return
     const dateData = state.dates?.[state.currentDate - 1]
     const needsMatches = !dateData || !dateData.matches || dateData.matches.length === 0
     if (!needsMatches || generatingMatchesRef.current) return
@@ -83,7 +85,7 @@ export default function Tournament() {
       })
       .catch((e) => setError(e?.message ?? String(e)))
       .finally(() => { generatingMatchesRef.current = false })
-  }, [tournamentId, state?.status, state?.currentDate, state?.players?.length])
+  }, [isAdmin, tournamentId, state?.status, state?.currentDate, state?.players?.length])
 
   const handleConfig = async (numCourts, numPlayers) => {
     setActionLoading(true)
@@ -202,22 +204,25 @@ export default function Tournament() {
 
   return (
     <>
-      <Navbar bg="dark" variant="dark" expand="lg" className="shadow-sm">
-        <Container>
-          <Navbar.Brand as={Link} to="/">Spectra</Navbar.Brand>
-          <Navbar.Toggle aria-controls="navbar-tournament" />
-          <Navbar.Collapse id="navbar-tournament">
-            <Nav className="ms-auto">
-              <Nav.Link as={Link} to="/">Inicio</Nav.Link>
-              <Nav.Link as={Link} to="/#ranking-general">Ranking general</Nav.Link>
-            </Nav>
-          </Navbar.Collapse>
-        </Container>
-      </Navbar>
+      {isAdmin && (
+        <Navbar bg="dark" variant="dark" expand="lg" className="shadow-sm">
+          <Container>
+            <Navbar.Brand as={Link} to="/admin">Spectra Admin</Navbar.Brand>
+            <Navbar.Toggle aria-controls="navbar-tournament" />
+            <Navbar.Collapse id="navbar-tournament">
+              <Nav className="ms-auto">
+                <Nav.Link as={Link} to="/admin">Panel</Nav.Link>
+                <Nav.Link as={Link} to="/">Sitio público</Nav.Link>
+              </Nav>
+            </Navbar.Collapse>
+          </Container>
+        </Navbar>
+      )}
 
-      <Container className="py-4">
-        <div className="mb-4 d-flex align-items-center flex-wrap gap-2">
-          {editingName ? (
+
+      <Container className="tournament-page-container py-4 py-lg-5">
+        <div className="mb-4 d-flex align-items-center flex-wrap gap-2 tournament-page-title">
+          {isAdmin && editingName ? (
             <Form onSubmit={handleSaveName} className="d-flex align-items-center gap-2 flex-wrap">
               <Form.Control
                 type="text"
@@ -238,9 +243,11 @@ export default function Tournament() {
           ) : (
             <>
               <h1 className="mb-0">{tournamentName || 'Torneo'} — Pádel</h1>
-              <Button variant="outline-secondary" size="sm" onClick={handleStartEditName} className="align-baseline">
-                Editar nombre
-              </Button>
+              {isAdmin && (
+                <Button variant="outline-secondary" size="sm" onClick={handleStartEditName} className="align-baseline">
+                  Editar nombre
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -250,7 +257,14 @@ export default function Tournament() {
           </Alert>
         )}
 
-        {state?.config && (
+        {tournamentRules && (
+          <Card className="mb-4">
+            <Card.Header className="fw-bold">Reglamento</Card.Header>
+            <Card.Body className="white-space-pre-wrap">{tournamentRules}</Card.Body>
+          </Card>
+        )}
+
+        {isAdmin && state?.config && (
           <div className="mb-3 d-flex justify-content-end">
             <button
               type="button"
@@ -276,18 +290,26 @@ export default function Tournament() {
             <p className="mt-2 text-muted">Cargando estado del torneo…</p>
           </div>
         ) : !state?.config ? (
-          <TournamentConfig
-            onSuccess={handleConfig}
-            loading={actionLoading}
-            error={error}
-          />
+          isAdmin ? (
+            <TournamentConfig
+              onSuccess={handleConfig}
+              loading={actionLoading}
+              error={error}
+            />
+          ) : (
+            <p className="text-muted text-center py-5">Este torneo aún no tiene canchas ni jugadores configurados.</p>
+          )
         ) : state?.players?.length === 0 ? (
-          <TournamentPlayers
-            numPlayers={state.config.numPlayers}
-            onSuccess={handlePlayers}
-            loading={actionLoading}
-            error={error}
-          />
+          isAdmin ? (
+            <TournamentPlayers
+              numPlayers={state.config.numPlayers}
+              onSuccess={handlePlayers}
+              loading={actionLoading}
+              error={error}
+            />
+          ) : (
+            <p className="text-muted text-center py-5">Se están cargando los jugadores.</p>
+          )
         ) : (
           <>
             {datesCount > 0 && (
@@ -313,11 +335,12 @@ export default function Tournament() {
               dateData={viewingDateData}
               viewingDate={viewingDate}
               onRefresh={fetchState}
-              onGenerateMatches={handleGenerateMatches}
-              onCompleteDate={handleCompleteDate}
-              onNextDate={handleNextDate}
+              onGenerateMatches={isAdmin ? handleGenerateMatches : undefined}
+              onCompleteDate={isAdmin ? handleCompleteDate : undefined}
+              onNextDate={isAdmin ? handleNextDate : undefined}
               canCompleteDate={canCompleteDate}
               loadingDateAction={actionLoading}
+              readOnly={!isAdmin}
             />
           </>
         )}

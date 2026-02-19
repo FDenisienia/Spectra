@@ -1,0 +1,558 @@
+/* Spectra League - Estilos unificados (temas por torneo en App.css) */
+
+.league-page {
+  --league-radius: 12px;
+  --league-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  --league-border: 1px solid rgba(0, 0, 0, 0.06);
+  min-height: 100vh;
+}
+
+.league-page-container {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+/* --- Header (colores por tema en App.css) --- */
+.league-header {
+  border-radius: var(--league-radius);
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--league-shadow);
+}
+
+.league-header h1 {
+  font-size: clamp(1.35rem, 3vw, 1.75rem);
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.league-header .subtitle {
+  font-size: 0.9375rem;
+  opacity: 0.9;
+  margin-top: 0.35rem;
+}
+
+/* En móvil: barra del torneo/equipo al 100% del ancho */
+@media (max-width: 767.98px) {
+  .league-page .league-header {
+    width: 100vw;
+    max-width: 100vw;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw !important;
+    margin-right: -50vw !important;
+    border-radius: 0;
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
+/* --- Tabs --- */
+.league-tabs .nav-tabs {
+  border: none;
+  gap: 0.25rem;
+  padding-bottom: 0;
+}
+
+.league-tabs .nav-link {
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-weight: 500;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.league-tabs .nav-link:hover {
+  color: #4338ca;
+  background: rgba(67, 56, 202, 0.06);
+}
+
+.league-tabs .nav-link.active {
+  color: #4338ca;
+  background: rgba(67, 56, 202, 0.1);
+}
+
+/* --- Cards --- */
+.league-page .card {
+  border: var(--league-border);
+  border-radius: var(--league-radius);
+  box-shadow: var(--league-shadow);
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.league-page .card:last-child {
+  margin-bottom: 0;
+}
+
+.league-page .card:hover {
+  transform: none;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+.league-page .card-header {
+  font-weight: 600;
+  padding: 1rem 1.25rem;
+  border-bottom: var(--league-border);
+}
+
+.league-page .card-body {
+  padding: 1.25rem;
+}
+
+/* --- Tables --- */
+.league-page .table {
+  font-size: 0.9375rem;
+}
+
+.league-page .table thead th {
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  padding: 0.75rem 1rem;
+  border-bottom: var(--league-border);
+}
+
+.league-page .table tbody td {
+  padding: 0.875rem 1rem;
+  vertical-align: middle;
+}
+
+.league-page .table-hover tbody tr:hover {
+  background: rgba(67, 56, 202, 0.03);
+}
+
+/* --- Buttons --- */
+.league-page .btn-primary {
+  background: #4338ca;
+  border-color: #4338ca;
+}
+
+.league-page .btn-primary:hover {
+  background: #3730a3;
+  border-color: #3730a3;
+}
+
+.league-page .btn-sm {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* --- Zone selector --- */
+.zone-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.zone-pills .btn {
+  border-radius: 20px;
+  padding: 0.4rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* --- Match row --- */
+.match-row {
+  transition: background 0.15s;
+}
+
+.match-row:hover {
+  background: #f8fafc;
+}
+
+.match-score {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 4rem;
+}
+
+/* --- Modals --- */
+.league-page .modal-content {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.league-page .modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: var(--league-border);
+  background: linear-gradient(to bottom, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.league-page .modal-title {
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: #1e293b;
+}
+
+.league-page .modal-body {
+  padding: 1.5rem;
+  background: #fff;
+}
+
+.league-page .modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: var(--league-border);
+  background: #f8fafc;
+}
+
+.league-page .form-label {
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: #475569;
+  margin-bottom: 0.35rem;
+}
+
+.league-page .form-control,
+.league-page .form-select {
+  border-radius: 8px;
+  border-color: #e2e8f0;
+  padding: 0.5rem 0.75rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.league-page .form-control:focus,
+.league-page .form-select:focus {
+  border-color: #4338ca;
+  box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.15);
+}
+
+/* --- Modal: Jugadores --- */
+.league-modal-players .modal-dialog {
+  max-width: 920px;
+  margin: 1.5rem auto;
+}
+
+.league-modal-players .modal-content {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.league-modal-players .modal-header {
+  padding: 1rem 1.5rem;
+  background: linear-gradient(to bottom, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.league-modal-players .modal-header .modal-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.league-modal-players .modal-body {
+  padding: 1.5rem;
+  background: #fff;
+}
+
+.league-modal-players .league-players-intro {
+  margin-bottom: 1.25rem;
+  padding: 0.875rem 1.25rem;
+  background: #f0f9ff;
+  border-radius: 10px;
+  border-left: 4px solid #4338ca;
+  font-size: 0.9375rem;
+  color: #475569;
+  line-height: 1.45;
+}
+
+/* Lista de jugadores: tabla para columnas perfectamente alineadas */
+.league-modal-players .league-players-list {
+  margin: 0 0 1.5rem 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.league-modal-players .league-players-table {
+  margin: 0;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.league-modal-players .league-players-table thead th {
+  padding: 0.6rem 1rem;
+  background: #f1f5f9;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border: none;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.league-modal-players .league-players-table__th--name { width: 28%; }
+.league-modal-players .league-players-table__th--dni { width: 18%; }
+.league-modal-players .league-players-table__th--num { width: 10%; }
+.league-modal-players .league-players-table__th--role { width: 18%; }
+.league-modal-players .league-players-table__th--actions { width: 26%; }
+
+.league-modal-players .league-players-table tbody td {
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  border-bottom: 1px solid #f1f5f9;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  vertical-align: middle;
+  text-align: left;
+  color: #64748b;
+}
+
+.league-modal-players .league-players-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.league-modal-players .league-players-table tbody tr:nth-child(even) td {
+  background: #fafbfc;
+}
+
+.league-modal-players .league-players-table__td--name {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.league-modal-players .league-players-table__td--name strong {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.league-modal-players .league-players-table__td--actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.league-modal-players .league-player-row--editing td {
+  background: #eff6ff !important;
+}
+
+.league-modal-players .league-player-row__input-name,
+.league-modal-players .league-player-row__input-dni,
+.league-modal-players .league-player-row__input-num,
+.league-modal-players .league-player-row__input-role {
+  width: 100%;
+  min-width: 0;
+}
+
+.league-modal-players .league-player-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.league-modal-players .league-player-row__btn-edit,
+.league-modal-players .league-player-row__btn-save,
+.league-modal-players .league-player-row__btn-cancel,
+.league-modal-players .league-player-row__btn-delete {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.6rem;
+  text-decoration: none;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.league-modal-players .league-player-row__btn-edit,
+.league-modal-players .league-player-row__btn-save {
+  color: #4338ca;
+  background: transparent;
+}
+
+.league-modal-players .league-player-row__btn-edit:hover,
+.league-modal-players .league-player-row__btn-save:hover {
+  color: #3730a3;
+  background: rgba(67, 56, 202, 0.08);
+}
+
+.league-modal-players .league-player-row__btn-cancel {
+  color: #64748b;
+  background: transparent;
+}
+
+.league-modal-players .league-player-row__btn-cancel:hover {
+  color: #475569;
+  background: rgba(100, 116, 139, 0.1);
+}
+
+.league-modal-players .league-player-row__btn-delete {
+  color: #dc2626;
+  background: transparent;
+}
+
+.league-modal-players .league-player-row__btn-delete:hover {
+  color: #b91c1c;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+/* Formulario agregar: columnas Nombre | DNI | Nº | Rol | Botón, bien anchos y alineados */
+.league-modal-players .league-players-add-form {
+  display: grid;
+  grid-template-columns: minmax(22ch, 1fr) minmax(10ch, 1fr) minmax(8rem, 10rem) 9rem auto;
+  grid-template-rows: auto auto;
+  gap: 0.4rem 1rem;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e1;
+}
+
+/* Fila de etiquetas (display: contents hace que los hijos participen del grid del form) */
+.league-modal-players .league-players-add-form__row--labels {
+  display: contents;
+}
+
+.league-modal-players .league-players-add-form__row--labels .league-players-add-form__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+  margin-bottom: 0;
+}
+
+.league-modal-players .league-players-add-form__label--empty {
+  visibility: hidden;
+}
+
+/* Fila de inputs */
+.league-modal-players .league-players-add-form__row--inputs {
+  display: contents;
+}
+
+.league-modal-players .league-players-add-form__name {
+  min-width: 0;
+  width: 100%;
+  min-width: 22ch; /* ~20 letras nombre y apellido */
+}
+
+.league-modal-players .league-players-add-form__dni {
+  min-width: 0;
+  width: 100%;
+  min-width: 10ch; /* 8 dígitos DNI */
+}
+
+.league-modal-players .league-players-add-form__num {
+  width: 100%;
+  min-width: 0;
+}
+
+.league-modal-players .league-players-add-form__role {
+  width: 100%;
+  min-width: 0;
+}
+
+.league-modal-players .league-players-add-form__btn {
+  justify-self: start;
+  background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
+  border: none;
+  padding: 0.5rem 1.25rem;
+  font-weight: 600;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(67, 56, 202, 0.3);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.league-modal-players .league-players-add-form__btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(67, 56, 202, 0.4);
+}
+
+.league-modal-players .league-players-add-form__btn:disabled {
+  opacity: 0.6;
+  transform: none;
+}
+
+/* En pantallas chicas: una columna, etiquetas arriba e inputs abajo */
+@media (max-width: 520px) {
+  .league-modal-players .league-players-add-form {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(10, auto);
+    gap: 0.25rem 0;
+  }
+  .league-modal-players .league-players-add-form__row--labels .league-players-add-form__label--empty {
+    display: none;
+  }
+  .league-modal-players .league-players-add-form__name,
+  .league-modal-players .league-players-add-form__dni {
+    min-width: 0;
+  }
+}
+
+/* --- Empty states --- */
+.league-empty {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  color: #94a3b8;
+  font-size: 0.9375rem;
+}
+
+.league-empty-icon {
+  font-size: 2rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.5;
+}
+
+/* --- Section hints --- */
+.league-hint {
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  margin-top: 0.25rem;
+}
+
+/* --- Steps / workflow --- */
+.league-steps {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.league-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: #94a3b8;
+}
+
+.league-step.active {
+  color: #4338ca;
+  font-weight: 500;
+}
+
+.league-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.league-step.active .league-step-num {
+  background: #4338ca;
+  color: white;
+}

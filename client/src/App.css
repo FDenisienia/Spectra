@@ -1,34 +1,68 @@
 :root {
   --spectra-primary: #6366f1;
   --spectra-dark: #1e1b4b;
+  --spectra-header-bg: #ffffff;
+  --spectra-header-fg: #0f172a;
+  --spectra-header-muted: #64748b;
+  --spectra-header-border: rgba(0, 0, 0, 0.06);
+  --spectra-card-radius: 12px;
+  --spectra-card-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  --spectra-card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --spectra-btn-radius: 8px;
+  --spectra-space: 1.5rem;
+  --spectra-space-lg: 2rem;
 }
 
 body {
   min-height: 100vh;
+  background: #f8fafc;
+  color: #1e293b;
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-.navbar-brand {
+h1, .h1 {
+  font-size: clamp(1.5rem, 4vw, 2rem);
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
 }
 
-.hero {
-  background: linear-gradient(135deg, var(--spectra-dark) 0%, var(--spectra-primary) 100%);
-  color: white;
-  padding: 4rem 0;
-  border-radius: 0 0 2rem 2rem;
-}
+h2, .h2 { font-size: 1.25rem; font-weight: 600; color: #1e293b; }
+h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
+.text-muted, .subtitle { color: var(--spectra-header-muted) !important; font-size: 0.9375rem; }
 
 .card {
-  border: none;
-  box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.08);
-  transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid var(--spectra-header-border);
+  border-radius: var(--spectra-card-radius);
+  box-shadow: var(--spectra-card-shadow);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  overflow: hidden;
 }
 
 .card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 0.5rem 1.5rem rgba(99, 102, 241, 0.15);
+  box-shadow: var(--spectra-card-shadow-hover);
 }
+
+.card-header {
+  padding: 1rem 1.25rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--spectra-header-border);
+  background: #fff;
+}
+
+.card-body {
+  padding: 1.25rem;
+}
+
+.btn {
+  border-radius: var(--spectra-btn-radius);
+  font-weight: 500;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.btn-primary { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+.btn-primary:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
 
 .btn-spectra {
   background: var(--spectra-primary);
@@ -40,4 +74,909 @@ body {
   background: #4f46e5;
   border-color: #4f46e5;
   color: white;
+}
+
+.hero {
+  background: linear-gradient(135deg, var(--spectra-dark) 0%, var(--spectra-primary) 100%);
+  color: white;
+  padding: 4rem 0;
+  border-radius: 0 0 2rem 2rem;
+}
+
+/* ========== Header a la izquierda (sidebar) ========== */
+.public-layout-sidebar {
+  display: flex;
+  min-height: 100vh;
+}
+
+.spectra-sidebar {
+  background: #ffffff;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  width: 260px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  box-shadow: 1px 0 2px rgba(0, 0, 0, 0.03);
+  overflow-y: auto;
+  z-index: 1030;
+  transition: transform 0.25s ease-out;
+}
+
+.spectra-sidebar-brand-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 0.75rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+}
+
+.spectra-brand {
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: 0.03em;
+  color: var(--spectra-header-fg) !important;
+  text-decoration: none !important;
+  transition: color 0.18s ease, opacity 0.18s ease;
+}
+
+.spectra-brand:hover {
+  color: var(--spectra-header-fg) !important;
+  opacity: 0.75;
+}
+
+.spectra-sidebar-close {
+  padding: 0.4rem 0.5rem !important;
+  color: var(--spectra-header-muted) !important;
+  border-radius: 6px;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.spectra-sidebar-close:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+  color: var(--spectra-header-fg) !important;
+}
+
+.spectra-sidebar-nav {
+  flex: 1;
+  padding: 0.5rem 0;
+  gap: 0;
+  background: #ffffff;
+}
+
+.spectra-sidebar-link {
+  color: var(--spectra-header-fg) !important;
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem !important;
+  border-radius: 6px;
+  transition: background 0.18s ease, color 0.18s ease;
+  margin-bottom: 2px;
+}
+
+.spectra-sidebar-link:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+  color: var(--spectra-header-fg) !important;
+}
+
+.spectra-sidebar-link.active {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: var(--spectra-header-fg) !important;
+  font-weight: 600;
+}
+
+.spectra-sidebar-admin {
+  color: var(--spectra-header-muted) !important;
+  font-size: 0.8125rem;
+  margin-top: 0.25rem;
+}
+
+.spectra-sidebar-admin:hover {
+  color: var(--spectra-header-fg) !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+.spectra-sidebar-sections {
+  flex: 1;
+  min-height: 0;
+}
+
+.spectra-sidebar-loading {
+  display: flex;
+  align-items: center;
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--spectra-header-muted);
+}
+
+.spectra-sidebar-accordion {
+  background: #ffffff !important;
+  border: none !important;
+}
+
+.spectra-sidebar-accordion-item {
+  background: #ffffff !important;
+  border: none !important;
+  margin-bottom: 2px;
+}
+
+.spectra-sidebar-accordion-item .accordion-collapse,
+.spectra-sidebar-accordion-item .accordion-body {
+  background: #ffffff !important;
+}
+
+.spectra-sidebar-accordion-header {
+  padding: 0.45rem 0.75rem !important;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--spectra-header-fg);
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.spectra-sidebar-accordion-header:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+.spectra-sidebar-accordion-header::after {
+  filter: none;
+  opacity: 0.5;
+  width: 0.4em;
+  height: 0.4em;
+}
+
+.spectra-sidebar .accordion-button {
+  background: #ffffff !important;
+  color: var(--spectra-header-fg) !important;
+  box-shadow: none !important;
+  border: none !important;
+  padding: 0.45rem 0.75rem !important;
+}
+
+.spectra-sidebar .accordion-button:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+.spectra-sidebar .accordion-button:not(.collapsed) {
+  background: rgba(0, 0, 0, 0.04) !important;
+  color: var(--spectra-header-fg) !important;
+}
+
+.spectra-sidebar .accordion-button:focus {
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+.spectra-sidebar-accordion-body {
+  padding: 0.2rem 0.5rem 0.5rem 0.85rem !important;
+  border: none !important;
+}
+
+.spectra-sidebar-accordion-body .nav-link {
+  padding: 0.4rem 0.6rem !important;
+  font-size: 0.8125rem;
+  border-radius: 6px;
+  margin-bottom: 1px;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.spectra-sidebar-accordion-body .nav-link:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+.spectra-sidebar-accordion-body .nav-link.active {
+  background: rgba(0, 0, 0, 0.06) !important;
+  font-weight: 600;
+}
+
+.spectra-sidebar-empty {
+  font-size: 0.8125rem;
+  color: var(--spectra-header-muted);
+  padding: 0.4rem 0.6rem;
+}
+
+.spectra-main-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.spectra-main {
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Topbar solo móvil (hamburger + marca) */
+.spectra-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--spectra-header-bg);
+  border-bottom: 1px solid var(--spectra-header-border);
+  padding: 0.625rem 1rem;
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-top: max(0.625rem, env(safe-area-inset-top));
+  min-height: 3rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
+}
+
+.spectra-menu-btn {
+  padding: 0.5rem 0.75rem !important;
+  color: var(--spectra-header-fg) !important;
+  border: none !important;
+  border-radius: var(--spectra-btn-radius);
+  transition: background 0.2s ease;
+  text-decoration: none !important;
+  box-shadow: none !important;
+}
+
+.spectra-menu-btn:hover,
+.spectra-menu-btn:focus {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: var(--spectra-header-fg) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.spectra-menu-btn-icon { font-size: 1.35rem; line-height: 1; }
+
+.spectra-topbar-brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+  color: var(--spectra-header-fg) !important;
+  text-decoration: none !important;
+}
+
+.spectra-topbar-spacer { width: 2.5rem; }
+
+.spectra-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 1040;
+  animation: spectraFadeIn 0.2s ease;
+}
+
+/* Móvil: sidebar como drawer desde la izquierda */
+@media (max-width: 767.98px) {
+  .spectra-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 85vw);
+    transform: translateX(-100%);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.08);
+    background: #ffffff;
+    opacity: 1;
+    z-index: 1050;
+  }
+
+  .spectra-sidebar-open {
+    transform: translateX(0);
+  }
+
+  .spectra-main {
+    padding-top: 0;
+  }
+}
+
+@media (min-width: 768px) {
+  .spectra-main-wrap .spectra-topbar {
+    display: none;
+  }
+}
+
+@keyframes spectraFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* --- Landing (PublicHome) — fondo blanco, texto negro --- */
+.landing-page {
+  --landing-bg: #ffffff;
+  --landing-fg: #000000;
+  --font-spectra-display: 'Blanka', 'Bebas Neue', sans-serif;
+  --font-spectra-body: 'Montserrat', sans-serif;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--landing-bg);
+  color: var(--landing-fg);
+  font-family: var(--font-spectra-body);
+}
+
+.landing-container {
+  flex: 1;
+  max-width: 100%;
+}
+
+.landing-hero {
+  background: transparent;
+  color: #000000;
+  padding: 1.5rem 0 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.landing-hero-title {
+  font-family: var(--font-spectra-display);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.5rem;
+  font-size: clamp(1.5rem, 6vw, 2.5rem);
+  color: #000000;
+}
+
+.landing-hero-lead {
+  font-family: var(--font-spectra-body);
+  font-size: clamp(0.9rem, 2.5vw, 1.05rem);
+  max-width: 32rem;
+  color: #1a1a1a;
+}
+
+@media (min-width: 576px) {
+  .landing-hero {
+    padding: 2.5rem 1.5rem 3rem;
+    margin-bottom: 2rem;
+    border-radius: 1.25rem;
+  }
+}
+
+.landing-section {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem 1rem;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+@media (min-width: 576px) {
+  .landing-section {
+    margin-bottom: 2rem;
+    padding: 2rem 1.5rem;
+  }
+}
+
+.landing-section-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.5rem;
+}
+
+.landing-section-lead {
+  font-size: 0.9375rem;
+  color: #475569;
+  max-width: 36rem;
+  margin-bottom: 1rem;
+}
+
+.landing-feature-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  max-width: 320px;
+}
+
+.landing-page .landing-feature-table {
+  margin: 0;
+  table-layout: fixed;
+  width: 100%;
+  font-size: 0.9375rem;
+}
+
+.landing-page .landing-feature-table thead th {
+  padding: 0.65rem 1rem;
+  background: #f1f5f9;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: none;
+  text-align: left;
+}
+
+.landing-page .landing-feature-table__th--num {
+  text-align: center;
+}
+
+.landing-page .landing-feature-table tbody td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  text-align: left;
+  color: #1e293b;
+}
+
+.landing-page .landing-feature-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.landing-page .landing-feature-table tbody tr:nth-child(even) td {
+  background: #fafbfc;
+}
+
+.landing-page .landing-feature-table__td-num {
+  text-align: center;
+  color: #475569;
+}
+
+.landing-page .landing-feature-table--plantel tbody td:first-child {
+  font-weight: 400;
+}
+
+.landing-card {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--spectra-card-radius);
+  box-shadow: var(--spectra-card-shadow);
+  overflow: hidden;
+  background: var(--landing-card-bg);
+  color: var(--landing-card-fg);
+}
+
+@media (min-width: 576px) {
+  .landing-card {
+    border-radius: 1rem;
+  }
+}
+
+.landing-card-header {
+  border: none;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.03em;
+  color: #fff !important;
+}
+
+.landing-card-header-padel {
+  background: linear-gradient(135deg, #1d82bd 0%, #166399 100%) !important;
+  color: #fff !important;
+}
+
+.landing-card-header-hockey {
+  background: linear-gradient(135deg, #3f6fd5 0%, #2d5bc4 100%) !important;
+  color: #fff !important;
+}
+
+.landing-card-header-futbol {
+  background: linear-gradient(135deg, #650857 0%, #ee2a7b 100%) !important;
+  color: #fff !important;
+}
+
+@media (min-width: 576px) {
+  .landing-card-header {
+    padding: 1rem 1.25rem;
+    font-size: 1rem;
+  }
+}
+
+.landing-card-body {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--landing-card-bg);
+  color: var(--landing-card-fg);
+}
+
+.landing-page .landing-table {
+  font-size: 0.8125rem;
+  font-family: var(--font-spectra-body);
+}
+
+.landing-page .landing-table th,
+.landing-page .landing-table td {
+  padding: 0.5rem 0.4rem;
+  white-space: nowrap;
+  color: #1e293b;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.landing-page .landing-table thead th {
+  background: #f1f5f9;
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  padding: 0.6rem 0.75rem;
+}
+
+.landing-page .landing-table-format tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+
+.landing-page .landing-table-format tbody tr:hover {
+  background: #f1f5f9;
+}
+
+.landing-page .table-light {
+  background: #f1f5f9;
+}
+
+.landing-page .table-light th {
+  font-weight: 600;
+  color: #64748b;
+}
+
+.landing-page .text-muted {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
+@media (min-width: 576px) {
+  .landing-page .landing-table {
+    font-size: 0.9375rem;
+  }
+  .landing-page .landing-table th,
+  .landing-page .landing-table td {
+    padding: 0.75rem 1rem;
+  }
+  .landing-page .landing-table thead th {
+    font-size: 0.75rem;
+    padding: 0.75rem 1rem;
+  }
+}
+
+.landing-footer {
+  background: #ffffff;
+  color: #000000;
+  padding: 0.875rem 1rem;
+  margin-top: 1.5rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  font-family: var(--font-spectra-body);
+}
+
+.landing-footer-inner {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.landing-footer small {
+  font-size: 0.75rem;
+  color: #1a1a1a;
+}
+
+@media (min-width: 576px) {
+  .landing-footer {
+    padding: 1.25rem 1rem;
+    margin-top: 2rem;
+  }
+  .landing-footer small {
+    font-size: 0.875rem;
+  }
+}
+
+
+/* ========== Temas por torneo (marca) ========== */
+.tournament-view {
+  min-height: 100%;
+  padding-bottom: var(--spectra-space-lg);
+}
+
+.tournament-view .container,
+.tournament-view .league-page .container,
+.tournament-page-container {
+  padding-top: var(--spectra-space-lg);
+  padding-bottom: var(--spectra-space-lg);
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+.tournament-page-title h1 {
+  margin-bottom: 0;
+}
+
+.tournament-view .card,
+.tournament-view .league-page .card {
+  border-radius: var(--spectra-card-radius);
+  box-shadow: var(--spectra-card-shadow);
+  margin-bottom: var(--spectra-space);
+}
+
+.tournament-view .card-header,
+.tournament-view .league-page .card-header {
+  padding: 1rem 1.25rem;
+  border-radius: var(--spectra-card-radius) var(--spectra-card-radius) 0 0;
+}
+
+.tournament-view .btn {
+  border-radius: var(--spectra-btn-radius);
+  font-weight: 500;
+}
+
+/* SMASH OPEN (pádel): #1d82bd, #eecb14, #eeeeee */
+.tournament-view.theme-padel {
+  --theme-primary: #1d82bd;
+  --theme-primary-dark: #166399;
+  --theme-accent: #eecb14;
+  --theme-bg: #e8eef2;
+  --theme-bg-alt: #ffffff;
+  --theme-fg: #1a1a1a;
+  --theme-muted: #555;
+  --font-display: Impact, 'Arial Black', sans-serif;
+  --font-body: 'Montserrat', sans-serif;
+  --font-serif: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-body);
+  background: linear-gradient(180deg, #e8eef2 0%, #e0e8ed 50%, #f0f4f7 100%);
+  min-height: 100%;
+  color: var(--theme-fg);
+}
+
+.tournament-view.theme-padel h1,
+.tournament-view.theme-padel .league-header h1 {
+  font-family: var(--font-display);
+  color: var(--theme-fg);
+  letter-spacing: 0.02em;
+}
+
+.tournament-view.theme-padel .card,
+.tournament-view.theme-padel .league-page .card {
+  background: var(--theme-bg-alt);
+  border-color: rgba(29, 130, 189, 0.2);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.tournament-view.theme-padel .card-header,
+.tournament-view.theme-padel .league-page .card-header {
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-dark) 100%);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 400;
+  border: none;
+}
+
+.tournament-view.theme-padel .league-header {
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-dark) 100%);
+  color: #fff;
+}
+
+.tournament-view.theme-padel .league-header h1 {
+  color: #fff !important;
+}
+
+.tournament-view.theme-padel .league-header .subtitle,
+.tournament-view.theme-padel .league-header .text-muted {
+  color: #fff !important;
+}
+
+.tournament-view.theme-padel .btn-primary,
+.tournament-view.theme-padel .league-page .btn-primary {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: #1a1a1a;
+}
+
+.tournament-view.theme-padel .btn-primary:hover,
+.tournament-view.theme-padel .league-page .btn-primary:hover {
+  background: #d9b612;
+  border-color: #d9b612;
+  color: #1a1a1a;
+}
+
+.tournament-view.theme-padel .nav-tabs .nav-link.active,
+.tournament-view.theme-padel .league-tabs .nav-link.active {
+  color: var(--theme-primary);
+  background: rgba(29, 130, 189, 0.12);
+}
+
+.tournament-view.theme-padel .nav-tabs .nav-link:hover,
+.tournament-view.theme-padel .league-tabs .nav-link:hover {
+  color: var(--theme-primary);
+  background: rgba(29, 130, 189, 0.06);
+}
+
+.tournament-view.theme-padel .table-hover tbody tr:hover,
+.tournament-view.theme-padel .league-page .table-hover tbody tr:hover {
+  background: rgba(29, 130, 189, 0.04);
+}
+
+/* ENTRE AMIGAS HOCKEY: #e29bfa, #3f6fd5, blanco, negro */
+.tournament-view.theme-hockey {
+  --theme-primary: #3f6fd5;
+  --theme-primary-dark: #2d5bc4;
+  --theme-accent: #e29bfa;
+  --theme-bg: #faf8fc;
+  --theme-bg-alt: #ffffff;
+  --theme-fg: #000000;
+  --theme-muted: #444;
+  --font-display: 'Montserrat', sans-serif;
+  --font-body: 'Montserrat', sans-serif;
+  --font-serif: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-body);
+  background: linear-gradient(180deg, #faf8fc 0%, #f5f2f9 50%, #fefcff 100%);
+  min-height: 100%;
+  color: var(--theme-fg);
+}
+
+.tournament-view.theme-hockey h1,
+.tournament-view.theme-hockey .league-header h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--theme-fg);
+}
+
+.tournament-view.theme-hockey .card,
+.tournament-view.theme-hockey .league-page .card {
+  background: var(--theme-bg);
+  border-color: rgba(63, 111, 213, 0.2);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.tournament-view.theme-hockey .card-header,
+.tournament-view.theme-hockey .league-page .card-header {
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-dark) 100%);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 600;
+  border: none;
+}
+
+.tournament-view.theme-hockey .league-header {
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-accent) 100%);
+  color: #fff;
+}
+
+.tournament-view.theme-hockey .league-header h1 {
+  color: #fff !important;
+}
+
+.tournament-view.theme-hockey .league-header .subtitle,
+.tournament-view.theme-hockey .league-header .text-muted {
+  color: #fff !important;
+}
+
+.tournament-view.theme-hockey .btn-primary,
+.tournament-view.theme-hockey .league-page .btn-primary {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: #000;
+}
+
+.tournament-view.theme-hockey .btn-primary:hover,
+.tournament-view.theme-hockey .league-page .btn-primary:hover {
+  background: #d88ae8;
+  border-color: #d88ae8;
+  color: #000;
+}
+
+.tournament-view.theme-hockey .nav-tabs .nav-link.active,
+.tournament-view.theme-hockey .league-tabs .nav-link.active {
+  color: var(--theme-primary);
+  background: rgba(63, 111, 213, 0.12);
+}
+
+.tournament-view.theme-hockey .nav-tabs .nav-link:hover,
+.tournament-view.theme-hockey .league-tabs .nav-link:hover {
+  color: var(--theme-primary);
+  background: rgba(226, 155, 250, 0.12);
+}
+
+.tournament-view.theme-hockey .league-tabs .nav-link.active {
+  background: rgba(226, 155, 250, 0.2);
+  color: #650857;
+}
+
+.tournament-view.theme-hockey .table-hover tbody tr:hover,
+.tournament-view.theme-hockey .league-page .table-hover tbody tr:hover {
+  background: rgba(63, 111, 213, 0.04);
+}
+
+/* ESTRELLAS DEL FUTBOL: #650857, #ee2a7b, #ffc30f */
+.tournament-view.theme-futbol {
+  --theme-primary: #ee2a7b;
+  --theme-dark: #650857;
+  --theme-accent: #ffc30f;
+  --theme-bg: #fdf5f9;
+  --theme-bg-alt: #ffffff;
+  --theme-fg: #1a1a1a;
+  --theme-muted: #555;
+  --font-display: 'Tomorrow', sans-serif;
+  --font-body: 'Tomorrow', sans-serif;
+  --font-serif: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-body);
+  background: linear-gradient(180deg, #fdf5f9 0%, #faf0f5 50%, #fff8fc 100%);
+  min-height: 100%;
+  color: var(--theme-fg);
+}
+
+.tournament-view.theme-futbol h1,
+.tournament-view.theme-futbol .league-header h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: #fff;
+}
+
+.tournament-view.theme-futbol .card,
+.tournament-view.theme-futbol .league-page .card {
+  background: var(--theme-bg);
+  border-color: rgba(101, 8, 87, 0.15);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.tournament-view.theme-futbol .card-header,
+.tournament-view.theme-futbol .league-page .card-header {
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-dark) 100%);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 600;
+  border: none;
+}
+
+.tournament-view.theme-futbol .league-header {
+  background: linear-gradient(135deg, var(--theme-dark) 0%, var(--theme-primary) 100%);
+  color: #fff;
+}
+
+.tournament-view.theme-futbol .league-header h1 {
+  color: #fff !important;
+}
+
+.tournament-view.theme-futbol .league-header .subtitle,
+.tournament-view.theme-futbol .league-header .text-muted {
+  color: #fff !important;
+}
+
+.tournament-view.theme-futbol .btn-primary,
+.tournament-view.theme-futbol .league-page .btn-primary {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: #1a1a1a;
+}
+
+.tournament-view.theme-futbol .btn-primary:hover,
+.tournament-view.theme-futbol .league-page .btn-primary:hover {
+  background: #e6b70d;
+  border-color: #e6b70d;
+  color: #1a1a1a;
+}
+
+.tournament-view.theme-futbol .nav-tabs .nav-link.active,
+.tournament-view.theme-futbol .league-tabs .nav-link.active {
+  color: var(--theme-dark);
+  background: rgba(238, 42, 123, 0.15);
+}
+
+.tournament-view.theme-futbol .nav-tabs .nav-link:hover,
+.tournament-view.theme-futbol .league-tabs .nav-link:hover {
+  color: var(--theme-primary);
+  background: rgba(255, 195, 15, 0.12);
+}
+
+.tournament-view.theme-futbol .table-hover tbody tr:hover,
+.tournament-view.theme-futbol .league-page .table-hover tbody tr:hover {
+  background: rgba(238, 42, 123, 0.04);
+}
+
+/* Botones "Fecha N" y outline en pádel (theme-padel) */
+.tournament-view.theme-padel .btn-sm.btn-primary {
+  background: var(--theme-primary);
+  border-color: var(--theme-primary);
+  color: #fff;
+}
+
+.tournament-view.theme-padel .btn-sm.btn-primary:hover {
+  background: var(--theme-primary-dark);
+  border-color: var(--theme-primary-dark);
+  color: #fff;
+}
+
+.tournament-view.theme-padel .btn-outline-secondary:hover {
+  border-color: var(--theme-primary);
+  color: var(--theme-primary);
 }

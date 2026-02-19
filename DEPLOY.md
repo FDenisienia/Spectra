@@ -17,10 +17,14 @@
    - **Root Directory:** poné `server` (así Railway usa solo la carpeta del backend).
    - **Build Command:** (dejalo vacío o `npm install`; Railway suele instalar solo).
    - **Start Command:** `npm start` (ya está en `server/package.json`).
-5. En la pestaña **Variables** del servicio, agregá una variable para el puerto:
-   - **Name:** `PORT`
-   - **Value:** `3000`
-   (Así el servidor escucha en el puerto que Railway expone.)
+5. En la pestaña **Variables** del servicio, agregá:
+   - **PORT** = `3000`
+   - **MYSQL_HOST** = host de tu MySQL (en Railway podés agregar el plugin MySQL o usar uno externo).
+   - **MYSQL_PORT** = `3306`
+   - **MYSQL_USER** = usuario de la base.
+   - **MYSQL_PASSWORD** = contraseña.
+   - **MYSQL_DATABASE** = `spectra` (creá antes la base en MySQL).
+   (Así el servidor escucha en el puerto que Railway expone y se conecta a MySQL.)
 6. En **Settings** → **Networking** → **Generate Domain**. Si te pide un **puerto**, ingresá **3000**. Railway te asigna una URL pública (ej. `https://spectra-production-xxxx.up.railway.app`).
 7. Copiá esa URL y agregale `/api` al final. Esa va a ser tu **URL del API**, por ejemplo:
    - `https://spectra-production-xxxx.up.railway.app/api`

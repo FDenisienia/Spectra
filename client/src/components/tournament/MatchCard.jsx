@@ -7,7 +7,7 @@ function PairNames({ pairIds, players }) {
   return <span>{names.join(' / ')}</span>
 }
 
-export default function MatchCard({ tournamentId, match, players, onUpdate, playersNeedRest = [] }) {
+export default function MatchCard({ tournamentId, match, players, onUpdate, playersNeedRest = [], readOnly = false }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [localSets, setLocalSets] = useState(
@@ -50,15 +50,23 @@ export default function MatchCard({ tournamentId, match, players, onUpdate, play
     }
   }
 
-  if (match.completed) {
-    const sets = match.sets || []
+  if (match.completed || readOnly) {
+    const sets = match.sets || match.completed ? (match.sets || []) : [0, 1, 2].map((i) => ({
+      pair1: match.pair1,
+      pair2: match.pair2,
+      pair1Games: localSets[i]?.p1 ?? 0,
+      pair2Games: localSets[i]?.p2 ?? 0,
+    }))
+    const displaySets = match.completed ? (match.sets || []) : (match.sets && match.sets.length ? match.sets : sets)
     return (
-      <Card className="mb-3 border-success">
+      <Card className={`mb-3 ${match.completed ? 'border-success' : ''}`}>
         <Card.Body className="py-2">
-          <div className="text-center mb-2 small">
-            <Badge bg="success">Bloque finalizado — cada jugador jugó 1 set con cada persona</Badge>
-          </div>
-          {sets.map((set, i) => {
+          {match.completed && (
+            <div className="text-center mb-2 small">
+              <Badge bg="success">Bloque finalizado — cada jugador jugó 1 set con cada persona</Badge>
+            </div>
+          )}
+          {(displaySets.length ? displaySets : [{ pair1: match.pair1, pair2: match.pair2, pair1Games: 0, pair2Games: 0 }]).map((set, i) => {
             const pair1 = set.pair1 || match.pair1
             const pair2 = set.pair2 || match.pair2
             return (
@@ -75,9 +83,11 @@ export default function MatchCard({ tournamentId, match, players, onUpdate, play
               </Row>
             )
           })}
-          <div className="text-center mt-1">
-            <Badge bg="success">Partido finalizado</Badge>
-          </div>
+          {match.completed && (
+            <div className="text-center mt-1">
+              <Badge bg="success">Partido finalizado</Badge>
+            </div>
+          )}
         </Card.Body>
       </Card>
     )

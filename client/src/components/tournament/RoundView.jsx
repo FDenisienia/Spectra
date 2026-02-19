@@ -43,6 +43,7 @@ export default function RoundView({
   onNextDate,
   canCompleteDate,
   loadingDateAction,
+  readOnly = false,
 }) {
   const dateLabel = viewingDate != null ? viewingDate : state?.currentDate
   const isViewingCurrentDate = (viewingDate ?? state?.currentDate) === state?.currentDate
@@ -165,10 +166,7 @@ export default function RoundView({
             ) : (
               <Badge bg="success">Escalera activa</Badge>
             )}
-            <span className="text-muted small">
-              Por cancha: 3 partidos (4 jugadores c/u), 4 descansan (rotación automática)
-            </span>
-            {isViewingCurrentDate && onGenerateMatches && (allMatches.length === 0) && (
+            {!readOnly && isViewingCurrentDate && onGenerateMatches && (allMatches.length === 0) && (
               <Button
                 variant="primary"
                 size="sm"
@@ -274,6 +272,7 @@ export default function RoundView({
                       players={state.players}
                       onUpdate={onRefresh}
                       playersNeedRest={getPlayersWhoNeedRest(m)}
+                      readOnly={readOnly}
                     />
                   ))
                 )}
@@ -374,13 +373,14 @@ export default function RoundView({
                 players={state.players}
                 onUpdate={onRefresh}
                 playersNeedRest={getPlayersWhoNeedRest(m)}
+                readOnly={readOnly}
               />
             ))}
           </Tab>
         ))}
       </Tabs>
 
-      {state.status === 'date' && isViewingCurrentDate && (
+      {!readOnly && state.status === 'date' && isViewingCurrentDate && (
         <Card className="border-primary">
           <Card.Body>
             {canCompleteDate ? (
@@ -405,7 +405,7 @@ export default function RoundView({
         </Card>
       )}
 
-      {state.status === 'date_complete' && isViewingCurrentDate && (
+      {!readOnly && state.status === 'date_complete' && isViewingCurrentDate && (
         <Card className="border-success">
           <Card.Body>
             <Alert variant="success" className="mb-2">
