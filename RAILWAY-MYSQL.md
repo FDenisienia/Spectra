@@ -77,6 +77,15 @@ Si usás un MySQL fuera de Railway (PlanetScale, Aiven, hosting propio):
 
 ## Resolución de problemas
 
+### 502 Bad Gateway (app arranca pero no responde)
+
+- **Quitar Health Check:** En Railway → tu servicio API → **Settings** → buscá "Health check" o "Healthcheck Path" y **dejalo vacío o quitá la configuración**. Varios usuarios reportan que esto soluciona 502.
+- Rutas `/`, `/health` y `/api/health` responden 200 para que Railway pueda hacer probe.
+
+### ECONNREFUSED 127.0.0.1:3306
+
+La app intenta conectar a localhost porque las variables de MySQL no están configuradas. Tenés que agregar las variables al servicio de tu API (paso 3 arriba). El código acepta tanto `MYSQL_HOST` como `MYSQLHOST` (formato Railway).
+
 ### "Connection refused" o timeout
 
 - Verificá que el servicio MySQL tenga **TCP Proxy** habilitado si la API está en otro proyecto.

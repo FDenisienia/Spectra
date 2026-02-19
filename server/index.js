@@ -61,14 +61,10 @@ async function withTournament(id, fn) {
   }
 }
 
-// --- Health ---
-app.get('/api/health', (req, res) => {
-  res.json({
-    ok: true,
-    message: 'Spectra API funcionando',
-    timestamp: new Date().toISOString(),
-  })
-})
+// --- Health (Railway puede hacer probe a / o /health) ---
+app.get('/', (req, res) => res.json({ ok: true, message: 'Spectra API', timestamp: new Date().toISOString() }))
+app.get('/health', (req, res) => res.json({ ok: true, message: 'Spectra API funcionando', timestamp: new Date().toISOString() }))
+app.get('/api/health', (req, res) => res.json({ ok: true, message: 'Spectra API funcionando', timestamp: new Date().toISOString() }))
 
 // --- Auth (público: login; protegido: me) ---
 app.post('/api/auth/login', async (req, res) => {
