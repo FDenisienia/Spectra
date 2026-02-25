@@ -801,6 +801,11 @@ app.get('/api/tournament/:id/league/standings', async (req, res) => {
     if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
     if (!isLeagueTournament(t)) return res.status(400).json({ error: 'Torneo no es de liga' })
     const zoneId = req.query.zone_id || null
+    const phaseFinalGroup = req.query.phase_final_group || null
+    if (phaseFinalGroup === 'upper' || phaseFinalGroup === 'lower') {
+      const standings = await leagueRepo.getPhaseFinalStandings(req.params.id, { phase_final_group: phaseFinalGroup, sport: t.sport })
+      return res.json(standings)
+    }
     const standings = await leagueRepo.getStandings(req.params.id, { zoneId, sport: t.sport })
     res.json(standings)
   } catch (e) {
@@ -836,13 +841,14 @@ app.get('/api/tournament/:id/league/discipline', async (req, res) => {
   }
 })
 
-// --- Playoffs (solo formato "Fase de Grupos"; formato Liga no tiene fase eliminatoria) ---
+// --- Playoffs (formato "Fase de Grupos") y Fase Final (formato Liga mini-ligas) ---
 app.get('/api/tournament/:id/league/playoff/bracket', async (req, res) => {
   try {
     const t = await tournamentsRepo.getById(req.params.id)
     if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
     if (!isLeagueTournament(t)) return res.status(400).json({ error: 'Torneo no es de liga' })
-    if (t.modality === 'liga') return res.json([]) // Formato Liga: sin playoffs, campeón por tabla
+    const config = await leagueRepo.getConfig(req.params.id)
+    if (t.modality === 'liga' && config.phase !== 'final_mini_ligas') return res.json([]) // Liga sin fase final activa
     const bracket = await leagueRepo.getPlayoffBracket(req.params.id)
     res.json(bracket)
   } catch (e) {
@@ -855,8 +861,21 @@ app.post('/api/tournament/:id/league/playoff/generate', requireAuth, async (req,
     const t = await tournamentsRepo.getById(req.params.id)
     if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
     if (!isLeagueTournament(t)) return res.status(400).json({ error: 'Torneo no es de liga' })
-    if (t.modality === 'liga') return res.status(400).json({ error: 'El formato Liga no tiene fase eliminatoria. El campeón se define únicamente por la posición en la tabla.' })
+    if (t.modality === 'liga') return res.status(400).json({ error: 'El formato Liga usa fase final mini-ligas. Usá POST /league/phase-final/generate.' })
     const bracket = await leagueRepo.generatePlayoffBracket(req.params.id)
+    res.json(bracket)
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.post('/api/tournament/:id/league/phase-final/generate', requireAuth, async (req, res) => {
+  try {
+    const t = await tournamentsRepo.getById(req.params.id)
+    if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
+    if (!isLeagueTournament(t)) return res.status(400).json({ error: 'Torneo no es de liga' })
+    if (t.modality !== 'liga') return res.status(400).json({ error: 'La fase final mini-ligas solo aplica al formato Liga.' })
+    const bracket = await leagueRepo.generatePhaseFinalMiniLeagues(req.params.id)
     res.json(bracket)
   } catch (e) {
     res.status(400).json({ error: e.message })

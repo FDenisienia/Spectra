@@ -113,7 +113,7 @@ const DEFAULT_PHASE = 'groups'
 
 export async function getConfig(tournamentId) {
   const [rows] = await pool.query('SELECT * FROM league_config WHERE tournament_id = ?', [tournamentId])
-  if (rows.length === 0) return { ...DEFAULT_CONFIG, phase: DEFAULT_PHASE, qualify_per_zone: null }
+  if (rows.length === 0) return { ...DEFAULT_CONFIG, phase: DEFAULT_PHASE, qualify_per_zone: null, fase_final_activa: false, odd_team_to: 'upper' }
   const r = rows[0]
   let qualify_per_zone = r.qualify_per_zone
   if (typeof qualify_per_zone === 'string') {
@@ -130,21 +130,26 @@ export async function getConfig(tournamentId) {
     round_trip: !!r.round_trip,
     phase: r.phase ?? DEFAULT_PHASE,
     qualify_per_zone: qualify_per_zone ?? null,
+    fase_final_activa: !!r.fase_final_activa,
+    odd_team_to: r.odd_team_to === 'lower' ? 'lower' : 'upper',
   }
 }
 
-export async function upsertConfig(tournamentId, { points_win, points_draw, points_loss, round_trip, phase, qualify_per_zone }) {
+export async function upsertConfig(tournamentId, { points_win, points_draw, points_loss, round_trip, phase, qualify_per_zone, fase_final_activa, odd_team_to }) {
   const qualifyJson = qualify_per_zone != null ? JSON.stringify(qualify_per_zone) : null
+  const oddVal = odd_team_to === 'lower' ? 'lower' : 'upper'
   await pool.query(
-    `INSERT INTO league_config (tournament_id, points_win, points_draw, points_loss, round_trip, phase, qualify_per_zone)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO league_config (tournament_id, points_win, points_draw, points_loss, round_trip, phase, qualify_per_zone, fase_final_activa, odd_team_to)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        points_win = COALESCE(VALUES(points_win), points_win),
        points_draw = COALESCE(VALUES(points_draw), points_draw),
        points_loss = COALESCE(VALUES(points_loss), points_loss),
        round_trip = COALESCE(VALUES(round_trip), round_trip),
        phase = COALESCE(VALUES(phase), phase),
-       qualify_per_zone = VALUES(qualify_per_zone)`,
+       qualify_per_zone = VALUES(qualify_per_zone),
+       fase_final_activa = COALESCE(VALUES(fase_final_activa), fase_final_activa),
+       odd_team_to = COALESCE(VALUES(odd_team_to), odd_team_to)`,
     [
       tournamentId,
       points_win ?? DEFAULT_CONFIG.points_win,
@@ -153,6 +158,8 @@ export async function upsertConfig(tournamentId, { points_win, points_draw, poin
       round_trip ? 1 : 0,
       phase ?? DEFAULT_PHASE,
       qualifyJson,
+      fase_final_activa ? 1 : 0,
+      oddVal,
     ]
   )
   return getConfig(tournamentId)
@@ -992,28 +999,29 @@ export async function getTeamMatchesSummary(tournamentId, teamId) {
 // --- Playoff rounds ---
 export async function getPlayoffRounds(tournamentId) {
   const [rows] = await pool.query(
-    'SELECT id, tournament_id, name, sort_order FROM league_playoff_rounds WHERE tournament_id = ? ORDER BY sort_order, id',
+    'SELECT id, tournament_id, name, sort_order, phase_final_group FROM league_playoff_rounds WHERE tournament_id = ? ORDER BY phase_final_group, sort_order, id',
     [tournamentId]
   )
-  return rows
+  return rows.map((r) => ({ ...r, phase_final_group: r.phase_final_group || null }))
 }
 
-export async function createPlayoffRound(tournamentId, { name, sort_order }) {
+export async function createPlayoffRound(tournamentId, { name, sort_order, phase_final_group }) {
   const id = genId('pr')
   const order = sort_order ?? 0
+  const groupVal = phase_final_group === 'upper' || phase_final_group === 'lower' ? phase_final_group : null
   await pool.query(
-    'INSERT INTO league_playoff_rounds (id, tournament_id, name, sort_order) VALUES (?, ?, ?, ?)',
-    [id, tournamentId, name || 'Ronda', order]
+    'INSERT INTO league_playoff_rounds (id, tournament_id, name, sort_order, phase_final_group) VALUES (?, ?, ?, ?, ?)',
+    [id, tournamentId, name || 'Ronda', order, groupVal]
   )
-  const [rows] = await pool.query('SELECT id, tournament_id, name, sort_order FROM league_playoff_rounds WHERE id = ?', [id])
-  return rows[0]
+  const [rows] = await pool.query('SELECT id, tournament_id, name, sort_order, phase_final_group FROM league_playoff_rounds WHERE id = ?', [id])
+  return { ...rows[0], phase_final_group: rows[0]?.phase_final_group || null }
 }
 
 // --- Playoff matches ---
 export async function getPlayoffMatches(tournamentId, { roundId = null } = {}) {
   let sql = `SELECT pm.id, pm.round_id, pm.home_team_id, pm.away_team_id, pm.home_slot, pm.away_slot,
     pm.home_score, pm.away_score, pm.winner_advances_to_match_id, pm.winner_advances_as, pm.played_at, pm.status,
-    pr.name AS round_name, pr.sort_order AS round_sort_order,
+    pr.name AS round_name, pr.sort_order AS round_sort_order, pr.phase_final_group,
     ht.name AS home_team_name, at.name AS away_team_name
    FROM league_playoff_matches pm
    JOIN league_playoff_rounds pr ON pm.round_id = pr.id
@@ -1032,6 +1040,7 @@ export async function getPlayoffMatches(tournamentId, { roundId = null } = {}) {
     round_id: r.round_id,
     round_name: r.round_name,
     round_sort_order: r.round_sort_order,
+    phase_final_group: r.phase_final_group || null,
     home_team_id: r.home_team_id,
     away_team_id: r.away_team_id,
     home_team_name: r.home_team_name,
@@ -1052,12 +1061,18 @@ export async function getPlayoffBracket(tournamentId) {
   const matches = await getPlayoffMatches(tournamentId)
   const byRound = {}
   for (const r of rounds) {
-    byRound[r.id] = { ...r, matches: [] }
+    byRound[r.id] = { ...r, phase_final_group: r.phase_final_group || null, matches: [] }
   }
   for (const m of matches) {
-    if (byRound[m.round_id]) byRound[m.round_id].matches.push(m)
+    if (byRound[m.round_id]) byRound[m.round_id].matches.push({ ...m, phase_final_group: m.phase_final_group || byRound[m.round_id]?.phase_final_group || null })
   }
-  return Object.values(byRound).sort((a, b) => a.sort_order - b.sort_order)
+  return Object.values(byRound).sort((a, b) => {
+    if (a.phase_final_group !== b.phase_final_group) {
+      const order = { upper: 0, lower: 1 }
+      return (order[a.phase_final_group] ?? 2) - (order[b.phase_final_group] ?? 2)
+    }
+    return a.sort_order - b.sort_order
+  })
 }
 
 export async function createPlayoffMatch(roundId, { home_team_id, away_team_id, home_slot, away_slot, winner_advances_to_match_id, winner_advances_as }) {
@@ -1124,6 +1139,164 @@ export async function setPlayoffWinner(matchId, winnerTeamId) {
   if (!m || !m.winner_advances_to_match_id) return
   const col = m.winner_advances_as === 'home' ? 'home_team_id' : 'away_team_id'
   await pool.query(`UPDATE league_playoff_matches SET ${col} = ? WHERE id = ?`, [winnerTeamId, m.winner_advances_to_match_id])
+}
+
+/**
+ * Genera la fase final en formato mini-ligas (Grupo A = mitad superior, Grupo B = mitad inferior).
+ * Solo si fase_final_activa es true. Usa la tabla final de la fase regular.
+ * odd_team_to: 'upper' | 'lower' indica a qué grupo va el equipo del medio cuando hay cantidad impar.
+ */
+export async function generatePhaseFinalMiniLeagues(tournamentId) {
+  const config = await getConfig(tournamentId)
+  if (!config.fase_final_activa) throw new Error('La fase final no está activa. Activá fase_final_activa en la configuración.')
+  if (config.phase === 'final_mini_ligas') throw new Error('La fase final ya fue generada.')
+
+  const standings = await getStandings(tournamentId, { zoneId: null })
+  if (standings.length < 2) throw new Error('Se necesitan al menos 2 equipos en la tabla para generar la fase final.')
+
+  const n = standings.length
+  const oddToUpper = config.odd_team_to !== 'lower'
+  const midIdx = Math.floor(n / 2)
+
+  let upperTeamIds = standings.slice(0, midIdx + (n % 2 === 1 && oddToUpper ? 1 : 0)).map((s) => s.team_id)
+  let lowerTeamIds = standings.slice(midIdx + (n % 2 === 1 && oddToUpper ? 1 : 0)).map((s) => s.team_id)
+
+  if (n % 2 === 1 && !oddToUpper) {
+    upperTeamIds = standings.slice(0, midIdx).map((s) => s.team_id)
+    lowerTeamIds = standings.slice(midIdx).map((s) => s.team_id)
+  }
+
+  if (upperTeamIds.length < 2 || lowerTeamIds.length < 2) {
+    throw new Error('Cada grupo debe tener al menos 2 equipos. Ajustá odd_team_to si hay cantidad impar.')
+  }
+
+  await pool.query('DELETE FROM league_playoff_rounds WHERE tournament_id = ?', [tournamentId])
+
+  const createRoundsAndMatches = async (teamIds, groupType, groupLabel) => {
+    const rounds = roundRobinRounds(teamIds)
+    const createdRounds = []
+    const createdMatches = []
+    for (let i = 0; i < rounds.length; i++) {
+      const round = await createPlayoffRound(tournamentId, {
+        name: `${groupLabel} — Jornada ${i + 1}`,
+        sort_order: i,
+        phase_final_group: groupType,
+      })
+      createdRounds.push(round)
+      for (const [homeId, awayId] of rounds[i]) {
+        const m = await createPlayoffMatch(round.id, { home_team_id: homeId, away_team_id: awayId })
+        createdMatches.push(m)
+      }
+    }
+    return { createdRounds, createdMatches }
+  }
+
+  await createRoundsAndMatches(upperTeamIds, 'upper', 'Grupo A')
+  await createRoundsAndMatches(lowerTeamIds, 'lower', 'Grupo B')
+
+  await upsertConfig(tournamentId, { ...config, phase: 'final_mini_ligas' })
+  return getPlayoffBracket(tournamentId)
+}
+
+/**
+ * Standings de la fase final mini-ligas, calculados solo con partidos de playoff del grupo indicado.
+ */
+export async function getPhaseFinalStandings(tournamentId, { phase_final_group, sport = null } = {}) {
+  if (!phase_final_group || (phase_final_group !== 'upper' && phase_final_group !== 'lower')) {
+    return []
+  }
+  const config = await getConfig(tournamentId)
+  if (config.phase !== 'final_mini_ligas') return []
+
+  const [roundsRows] = await pool.query(
+    'SELECT id FROM league_playoff_rounds WHERE tournament_id = ? AND phase_final_group = ?',
+    [tournamentId, phase_final_group]
+  )
+  const roundIds = roundsRows.map((r) => r.id)
+  if (roundIds.length === 0) return []
+
+  const placeholders = roundIds.map(() => '?').join(',')
+  const [matches] = await pool.query(
+    `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score, m.home_games, m.away_games, m.status
+     FROM league_playoff_matches m WHERE m.round_id IN (${placeholders}) AND m.status = 'played'`,
+    roundIds
+  )
+
+  const [teamsRows] = await pool.query(
+    `SELECT DISTINCT t.id, t.name, t.shield_url FROM league_teams t
+     JOIN league_playoff_matches m ON (m.home_team_id = t.id OR m.away_team_id = t.id)
+     WHERE m.round_id IN (${placeholders})`,
+    roundIds
+  )
+
+  const isPadel = sport === 'padel'
+  const ptsWin = config.points_win ?? 3
+  const ptsDraw = config.points_draw ?? 1
+  const stats = {}
+  for (const t of teamsRows) {
+    stats[t.id] = {
+      team_id: t.id,
+      team_name: t.name,
+      shield_url: t.shield_url,
+      played: 0,
+      won: 0,
+      drawn: 0,
+      lost: 0,
+      goals_for: 0,
+      goals_against: 0,
+      ...(isPadel && { games_for: 0, games_against: 0 }),
+    }
+  }
+  for (const m of matches) {
+    const home = stats[m.home_team_id]
+    const away = stats[m.away_team_id]
+    if (!home || !away) continue
+    const h = m.home_score ?? 0
+    const a = m.away_score ?? 0
+    home.played++
+    away.played++
+    home.goals_for += h
+    home.goals_against += a
+    away.goals_for += a
+    away.goals_against += h
+    if (isPadel) {
+      const hg = m.home_games ?? 0
+      const ag = m.away_games ?? 0
+      home.games_for = (home.games_for ?? 0) + hg
+      home.games_against = (home.games_against ?? 0) + ag
+      away.games_for = (away.games_for ?? 0) + ag
+      away.games_against = (away.games_against ?? 0) + hg
+    }
+    if (h > a) {
+      home.won++
+      away.lost++
+    } else if (h < a) {
+      away.won++
+      home.lost++
+    } else {
+      home.drawn++
+      away.drawn++
+    }
+  }
+  const list = Object.values(stats).map((s) => ({
+    ...s,
+    goal_diff: s.goals_for - s.goals_against,
+    ...(isPadel && { games_diff: (s.games_for ?? 0) - (s.games_against ?? 0) }),
+    points: s.won * ptsWin + s.drawn * ptsDraw,
+  }))
+  list.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points
+    const dgA = a.goal_diff ?? 0
+    const dgB = b.goal_diff ?? 0
+    if (dgB !== dgA) return dgB - dgA
+    if (isPadel) {
+      const gdA = a.games_diff ?? 0
+      const gdB = b.games_diff ?? 0
+      if (gdB !== gdA) return gdB - gdA
+    }
+    return (b.goals_for ?? 0) - (a.goals_for ?? 0)
+  })
+  return list.map((s, i) => ({ ...s, position: i + 1 }))
 }
 
 /** Genera el cuadro de playoffs a partir de tablas de grupos. qualify_per_zone = { zoneId: number } (cuántos clasifican por zona). */

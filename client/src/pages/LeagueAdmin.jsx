@@ -25,7 +25,7 @@ export default function LeagueAdmin() {
   const [editingMatchId, setEditingMatchId] = useState(null)
   const [matchScoreForm, setMatchScoreForm] = useState({ home_score: '', away_score: '', home_games: '', away_games: '' })
   const [saving, setSaving] = useState(false)
-  const [config, setConfig] = useState({ points_win: 3, points_draw: 1, points_loss: 0, round_trip: false })
+  const [config, setConfig] = useState({ points_win: 3, points_draw: 1, points_loss: 0, round_trip: false, fase_final_activa: false, odd_team_to: 'upper' })
   const [configSaving, setConfigSaving] = useState(false)
   const [fixtureGenerating, setFixtureGenerating] = useState(false)
   const [zones, setZones] = useState([])
@@ -49,6 +49,8 @@ export default function LeagueAdmin() {
   const [drawZonesNum, setDrawZonesNum] = useState(2)
   const [drawZonesLoading, setDrawZonesLoading] = useState(false)
   const [playoffGenerating, setPlayoffGenerating] = useState(false)
+  const [phaseFinalGenerating, setPhaseFinalGenerating] = useState(false)
+  const [phaseFinalStandings, setPhaseFinalStandings] = useState({ upper: [], lower: [] })
   const [playoffBracket, setPlayoffBracket] = useState([])
   const [editingPlayoffMatchId, setEditingPlayoffMatchId] = useState(null)
   const [activeTab, setActiveTab] = useState('teams')
@@ -75,12 +77,22 @@ export default function LeagueAdmin() {
         setTournament(t)
         setTeams(te || [])
         setMatchdays(mds || [])
-        setConfig(cfg || { points_win: 3, points_draw: 1, points_loss: 0, round_trip: false })
+        setConfig(cfg || { points_win: 3, points_draw: 1, points_loss: 0, round_trip: false, fase_final_activa: false, odd_team_to: 'upper' })
         setZones(z || [])
         setScorers(sc || [])
         setDiscipline(disc || [])
         setPlayoffBracket(Array.isArray(playoff) ? playoff : [])
         setError(null)
+        if (cfg?.phase === 'final_mini_ligas') {
+          Promise.all([
+            api.getStandings(tournamentId, { phase_final_group: 'upper' }),
+            api.getStandings(tournamentId, { phase_final_group: 'lower' }),
+          ]).then(([upper, lower]) => {
+            setPhaseFinalStandings({ upper: upper || [], lower: lower || [] })
+          }).catch(() => {})
+        } else {
+          setPhaseFinalStandings({ upper: [], lower: [] })
+        }
         const zonesList = z || []
         if (zonesList.length === 0) {
           return api.getStandings(tournamentId).then((st) => {
@@ -400,8 +412,35 @@ export default function LeagueAdmin() {
       })
       setPlayoffBracket(Array.isArray(bracket) ? bracket : [])
       setEditingPlayoffMatchId(null)
+      if (config?.phase === 'final_mini_ligas') {
+        const [upper, lower] = await Promise.all([
+          api.getStandings(tournamentId, { phase_final_group: 'upper' }),
+          api.getStandings(tournamentId, { phase_final_group: 'lower' }),
+        ])
+        setPhaseFinalStandings({ upper: upper || [], lower: lower || [] })
+      }
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  const handleGeneratePhaseFinal = async () => {
+    if (!config.fase_final_activa) {
+      setError('Activá la fase final en Configuración antes de generarla.')
+      return
+    }
+    if (!window.confirm('¿Generar fase final? Se dividirá la tabla en dos grupos (mitad superior e inferior) y cada uno jugará una mini-liga todos contra todos.')) return
+    setPhaseFinalGenerating(true)
+    setError(null)
+    try {
+      await api.generatePhaseFinal(tournamentId)
+      loadAll()
+      setActiveTab('phasefinal')
+      alert('Fase final generada. Grupo A: mitad superior, Grupo B: mitad inferior.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setPhaseFinalGenerating(false)
     }
   }
 
@@ -595,6 +634,14 @@ export default function LeagueAdmin() {
                   </span>
                 </>
               )}
+              {isLigaFormat && (config.fase_final_activa || config.phase === 'final_mini_ligas') && (
+                <>
+                  <span className="league-step">→</span>
+                  <span className="league-step">
+                    <span className="league-step-num">6</span> Fase final
+                  </span>
+                </>
+              )}
             </div>
             <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'teams')} className="league-tabs mb-4">
             <Tab eventKey="teams" title={`1. ${teamsLabel}`}>
@@ -753,6 +800,35 @@ export default function LeagueAdmin() {
                         Liga simple: {teams.length > 0 ? teams.length - 1 : 'N-1'} jornadas · Ida y vuelta: {teams.length > 0 ? 2 * (teams.length - 1) : '2×(N-1)'} jornadas
                       </Form.Text>
                     </Form.Group>
+                    {isLigaFormat && (
+                      <>
+                        <Form.Group className="mb-3">
+                          <Form.Check
+                            type="checkbox"
+                            id="fase_final_activa"
+                            label="Fase final activa (mitad superior e inferior juegan mini-ligas)"
+                            checked={!!config.fase_final_activa}
+                            onChange={(e) => setConfig((c) => ({ ...c, fase_final_activa: e.target.checked }))}
+                          />
+                          <Form.Text className="text-muted">
+                            Al finalizar la fase regular, se genera una segunda fase con Grupo A (mitad superior) y Grupo B (mitad inferior).
+                          </Form.Text>
+                        </Form.Group>
+                        {config.fase_final_activa && (
+                          <Form.Group className="mb-3">
+                            <Form.Label>Si hay cantidad impar de equipos, el del medio va a</Form.Label>
+                            <Form.Select
+                              value={config.odd_team_to || 'upper'}
+                              onChange={(e) => setConfig((c) => ({ ...c, odd_team_to: e.target.value }))}
+                              style={{ maxWidth: 200 }}
+                            >
+                              <option value="upper">Grupo A (mitad superior)</option>
+                              <option value="lower">Grupo B (mitad inferior)</option>
+                            </Form.Select>
+                          </Form.Group>
+                        )}
+                      </>
+                    )}
                     <Button type="submit" variant="primary" disabled={configSaving}>
                       {configSaving ? 'Guardando…' : 'Guardar configuración'}
                     </Button>
@@ -785,6 +861,17 @@ export default function LeagueAdmin() {
                         title="Clasifican los 2 primeros de cada grupo"
                       >
                         {playoffGenerating ? 'Generando…' : 'Generar playoffs (2 por grupo)'}
+                      </Button>
+                    )}
+                    {isLigaFormat && config.fase_final_activa && config.phase !== 'final_mini_ligas' && (
+                      <Button
+                        size="sm"
+                        variant="success"
+                        onClick={handleGeneratePhaseFinal}
+                        disabled={phaseFinalGenerating}
+                        title="Genera fase final: mitad superior e inferior en mini-ligas"
+                      >
+                        {phaseFinalGenerating ? 'Generando…' : 'Generar fase final'}
                       </Button>
                     )}
                   </div>
@@ -967,6 +1054,97 @@ export default function LeagueAdmin() {
                   )}
                 </Card.Body>
               </Card>
+            </Tab>
+            )}
+            {isLigaFormat && (config.fase_final_activa || config.phase === 'final_mini_ligas') && (
+            <Tab eventKey="phasefinal" title="Fase final">
+              {config.phase !== 'final_mini_ligas' ? (
+                <Card>
+                  <Card.Body className="py-5 text-center text-muted">
+                    <p className="mb-2">La fase final aún no fue generada.</p>
+                    <p className="mb-0 small">Completá las jornadas de la fase regular y usá el botón «Generar fase final» en la pestaña Jornadas.</p>
+                  </Card.Body>
+                </Card>
+              ) : (
+                <>
+                  {['upper', 'lower'].map((groupType) => {
+                    const groupLabel = groupType === 'upper' ? 'Grupo A (mitad superior)' : 'Grupo B (mitad inferior)'
+                    const groupRounds = playoffBracket.filter((r) => r.phase_final_group === groupType)
+                    const groupStandings = groupType === 'upper' ? phaseFinalStandings.upper : phaseFinalStandings.lower
+                    return (
+                      <Card key={groupType} className="mb-4">
+                        <Card.Header className="fw-bold">{groupLabel}</Card.Header>
+                        <Card.Body>
+                          <h6 className="mb-2">Tabla</h6>
+                          {groupStandings.length === 0 ? (
+                            <p className="text-muted small">Sin partidos jugados aún.</p>
+                          ) : (
+                            <Table responsive size="sm" className="mb-4">
+                              <thead className="table-light">
+                                <tr><th>#</th><th>{teamLabel}</th><th>PJ</th><th>PG</th>{!isPadel && <th>PE</th>}<th>PP</th><th>GF</th><th>GC</th><th>DG</th><th>Pts</th></tr>
+                              </thead>
+                              <tbody>
+                                {groupStandings.map((row) => (
+                                  <tr key={row.team_id}>
+                                    <td className="fw-semibold">{row.position}</td>
+                                    <td>{row.team_name}</td>
+                                    <td>{row.played}</td>
+                                    <td>{row.won}</td>
+                                    {!isPadel && <td>{row.drawn}</td>}
+                                    <td>{row.lost}</td>
+                                    <td>{row.goals_for}</td>
+                                    <td>{row.goals_against}</td>
+                                    <td>{row.goal_diff}</td>
+                                    <td className="fw-semibold">{row.points}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </Table>
+                          )}
+                          <h6 className="mb-2">Partidos</h6>
+                          {groupRounds.map((round) => (
+                            <div key={round.id} className="mb-3">
+                              <div className="small fw-semibold text-muted mb-1">{round.name}</div>
+                              <Table responsive size="sm" className="mb-0">
+                                <thead className="table-light">
+                                  <tr><th className="text-end">Local</th><th className="text-center">Resultado</th><th>Visitante</th><th></th></tr>
+                                </thead>
+                                <tbody>
+                                  {(round.matches || []).map((m) => (
+                                    <tr key={m.id}>
+                                      <td className="text-end">{m.home_team_name || '—'}</td>
+                                      <td className="text-center">
+                                        {editingPlayoffMatchId === m.id ? (
+                                          <span className="d-inline-flex align-items-center gap-1">
+                                            <Form.Control type="number" size="sm" style={{ width: 50 }} value={matchScoreForm.home_score} onChange={(e) => setMatchScoreForm((f) => ({ ...f, home_score: e.target.value }))} />
+                                            -
+                                            <Form.Control type="number" size="sm" style={{ width: 50 }} value={matchScoreForm.away_score} onChange={(e) => setMatchScoreForm((f) => ({ ...f, away_score: e.target.value }))} />
+                                            <Button size="sm" onClick={() => handleUpdatePlayoffScore(m.id, matchScoreForm.home_score, matchScoreForm.away_score)}>Guardar</Button>
+                                            <Button size="sm" variant="outline-secondary" onClick={() => setEditingPlayoffMatchId(null)}>Cancelar</Button>
+                                          </span>
+                                        ) : m.status === 'played' ? (
+                                          <span>
+                                            {m.home_score ?? 0} - {m.away_score ?? 0}
+                                            <Button variant="link" size="sm" className="p-0 ms-1" onClick={() => { setEditingPlayoffMatchId(m.id); setMatchScoreForm({ home_score: m.home_score ?? '', away_score: m.away_score ?? '' }); }}>Editar</Button>
+                                          </span>
+                                        ) : (
+                                          <Button size="sm" variant="outline-secondary" onClick={() => { setEditingPlayoffMatchId(m.id); setMatchScoreForm({ home_score: '', away_score: '' }); }}>Cargar resultado</Button>
+                                        )}
+                                      </td>
+                                      <td>{m.away_team_name || '—'}</td>
+                                      <td></td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </Table>
+                            </div>
+                          ))}
+                        </Card.Body>
+                      </Card>
+                    )
+                  })}
+                </>
+              )}
             </Tab>
             )}
             {!isLigaFormat && (

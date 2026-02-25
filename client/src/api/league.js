@@ -271,8 +271,11 @@ export async function deleteCard(tournamentId, cardId) {
   if (!res.ok && res.status !== 204) throw new Error(await parseError(res))
 }
 
-export async function getStandings(tournamentId, { zoneId } = {}) {
-  const url = zoneId ? `${base(tournamentId)}/standings?zone_id=${encodeURIComponent(zoneId)}` : `${base(tournamentId)}/standings`
+export async function getStandings(tournamentId, { zoneId, phase_final_group } = {}) {
+  const params = new URLSearchParams()
+  if (zoneId) params.set('zone_id', zoneId)
+  if (phase_final_group) params.set('phase_final_group', phase_final_group)
+  const url = `${base(tournamentId)}/standings${params.toString() ? '?' + params.toString() : ''}`
   const res = await fetch(url)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
@@ -295,6 +298,17 @@ export async function getDiscipline(tournamentId, { zoneId } = {}) {
 /** Obtiene el cuadro de playoffs (rondas y partidos). */
 export async function getPlayoffBracket(tournamentId) {
   const res = await fetch(`${base(tournamentId)}/playoff/bracket`)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** Genera la fase final mini-ligas (formato Liga: Grupo A = mitad superior, Grupo B = mitad inferior). */
+export async function generatePhaseFinal(tournamentId) {
+  const res = await fetch(`${base(tournamentId)}/phase-final/generate`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }

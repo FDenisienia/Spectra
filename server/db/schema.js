@@ -193,6 +193,9 @@ export const indexStatements = [
  */
 /** Migraciones para bases ya creadas. */
 const migrationStatements = [
+  'ALTER TABLE league_config ADD COLUMN fase_final_activa TINYINT(1) NOT NULL DEFAULT 0 AFTER qualify_per_zone',
+  "ALTER TABLE league_config ADD COLUMN odd_team_to VARCHAR(10) NULL DEFAULT 'upper' AFTER fase_final_activa",
+  'ALTER TABLE league_playoff_rounds ADD COLUMN phase_final_group VARCHAR(10) NULL AFTER sort_order',
   'ALTER TABLE tournaments ADD COLUMN modality VARCHAR(20) NULL AFTER rules',
   'ALTER TABLE league_teams ADD COLUMN zone_id VARCHAR(50) NULL AFTER tournament_id',
   'ALTER TABLE league_matches ADD COLUMN zone_id VARCHAR(50) NULL AFTER matchday_id',

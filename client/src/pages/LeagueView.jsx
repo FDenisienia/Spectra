@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Container, Card, Spinner, Alert, ListGroup, Table, Button } from 'react-bootstrap'
+import { Container, Card, Spinner, Alert, ListGroup, Table, Button, Row, Col } from 'react-bootstrap'
 import * as api from '../api/league'
 import TeamDetail from './TeamDetail'
 import '../styles/League.css'
@@ -14,6 +14,7 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [playoffBracket, setPlayoffBracket] = useState([])
+  const [phaseFinalStandings, setPhaseFinalStandings] = useState({ upper: [], lower: [] })
 
   useEffect(() => {
     if (!tournamentId) return
@@ -68,17 +69,23 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
     }
   }, [tournamentId, zones])
 
-  // Formato Liga: sin playoffs; solo se pide bracket en formato "Fase de Grupos"
   useEffect(() => {
     if (!tournamentId) return
-    if (tournament?.modality === 'liga') {
-      setPlayoffBracket([])
-      return
-    }
     api.getPlayoffBracket(tournamentId)
-      .then((bracket) => setPlayoffBracket(Array.isArray(bracket) ? bracket : []))
+      .then((bracket) => {
+        const b = Array.isArray(bracket) ? bracket : []
+        setPlayoffBracket(b)
+        if (b.length > 0 && b.some((r) => r.phase_final_group)) {
+          Promise.all([
+            api.getStandings(tournamentId, { phase_final_group: 'upper' }),
+            api.getStandings(tournamentId, { phase_final_group: 'lower' }),
+          ]).then(([upper, lower]) => setPhaseFinalStandings({ upper: upper || [], lower: lower || [] })).catch(() => {})
+        } else {
+          setPhaseFinalStandings({ upper: [], lower: [] })
+        }
+      })
       .catch(() => setPlayoffBracket([]))
-  }, [tournamentId, tournament?.modality])
+  }, [tournamentId])
 
   // Si hay teamId, mostrar detalle del equipo
   if (teamId) {
@@ -239,11 +246,43 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
             </Card>
             )}
 
-            {/* Playoffs: solo en formato Fase de Grupos; formato Liga no tiene fase eliminatoria */}
-            {tournament?.modality !== 'liga' && playoffBracket.length > 0 && (
+            {/* Playoffs (Fase de Grupos) o Fase final mini-ligas (Liga) */}
+            {playoffBracket.length > 0 && (
               <Card className="mb-4">
-                <Card.Header className="fw-bold">Playoffs</Card.Header>
+                <Card.Header className="fw-bold">{tournament?.modality === 'liga' ? 'Fase final' : 'Playoffs'}</Card.Header>
                 <Card.Body className="p-0">
+                  {playoffBracket.some((r) => r.phase_final_group) && (phaseFinalStandings.upper.length > 0 || phaseFinalStandings.lower.length > 0) && (
+                    <div className="p-3 border-bottom">
+                      <Row>
+                        {phaseFinalStandings.upper.length > 0 && (
+                          <Col md={6} className="mb-3 mb-md-0">
+                            <h6 className="fw-semibold mb-2">Grupo A (mitad superior)</h6>
+                            <Table size="sm" className="mb-0">
+                              <thead className="table-light"><tr><th>#</th><th>{teamLabel}</th><th>Pts</th></tr></thead>
+                              <tbody>
+                                {phaseFinalStandings.upper.slice(0, 6).map((row) => (
+                                  <tr key={row.team_id}><td>{row.position}</td><td>{row.team_name}</td><td>{row.points}</td></tr>
+                                ))}
+                              </tbody>
+                            </Table>
+                          </Col>
+                        )}
+                        {phaseFinalStandings.lower.length > 0 && (
+                          <Col md={6}>
+                            <h6 className="fw-semibold mb-2">Grupo B (mitad inferior)</h6>
+                            <Table size="sm" className="mb-0">
+                              <thead className="table-light"><tr><th>#</th><th>{teamLabel}</th><th>Pts</th></tr></thead>
+                              <tbody>
+                                {phaseFinalStandings.lower.slice(0, 6).map((row) => (
+                                  <tr key={row.team_id}><td>{row.position}</td><td>{row.team_name}</td><td>{row.points}</td></tr>
+                                ))}
+                              </tbody>
+                            </Table>
+                          </Col>
+                        )}
+                      </Row>
+                    </div>
+                  )}
                   {playoffBracket.map((round) => (
                     <div key={round.id} className="border-bottom">
                       <div className="px-3 py-2 bg-light small fw-semibold">{round.name}</div>
