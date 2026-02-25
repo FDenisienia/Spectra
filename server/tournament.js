@@ -1,7 +1,7 @@
 /**
- * Torneo por fechas y canchas — cantidad de jugadores libre (múltiplo de 4 por cancha).
- * - Cada cancha tiene numPlayers/numCourts jugadores (mínimo 4 por cancha).
- * - Por fecha, por cancha: 1 bloque de 4 descansa (rotando), el resto juega (1 partido por bloque de 4).
+ * Torneo por fechas y canchas — cantidad de jugadores flexible.
+ * - Cada cancha base admite 4 jugadores. Si N > C*4, los excedentes se distribuyen secuencialmente (cancha 1, 2, 3...).
+ * - Por fecha, por cancha: bloques de 4, 1 bloque descansa (rotando) si hay 2+ bloques; cada otro bloque = 1 partido.
  * - Primera fecha: clasificatoria (no se aplica escalera).
  * - A partir de la fecha 2: se aplica escalera (suben 2, bajan 2) al finalizar cada fecha.
  */
@@ -25,6 +25,10 @@ function initState(loaded) {
   state = loaded
     ? JSON.parse(JSON.stringify(loaded))
     : defaultState()
+  // Compatibilidad: torneos antiguos sin playersPerCourtByCourt
+  if (state.config && !state.config.playersPerCourtByCourt && state.config.numCourts && state.config.numPlayers) {
+    state.config.playersPerCourtByCourt = getPlayersPerCourtArray(state.config.numCourts, state.config.numPlayers)
+  }
   return state
 }
 
@@ -32,19 +36,31 @@ function reset() {
   state = defaultState()
 }
 
+/**
+ * Distribución de jugadores por cancha:
+ * - Base: 4 por cancha (capacidad_base = C × 4).
+ * - Si N > capacidad_base, excedentes se asignan 1 por cancha secuencialmente (cancha 1 → 2 → 3 → …).
+ * - Devuelve array [count0, count1, …] para cada cancha.
+ */
+function getPlayersPerCourtArray(numCourts, numPlayers) {
+  const capacityBase = numCourts * BLOCK_SIZE
+  if (numPlayers < capacityBase) return null
+  const excess = numPlayers - capacityBase
+  const q = Math.floor(excess / numCourts)
+  const r = excess % numCourts
+  return Array.from({ length: numCourts }, (_, c) => BLOCK_SIZE + q + (c < r ? 1 : 0))
+}
+
 function setConfig(numCourts, numPlayers) {
   if (numCourts < 1) throw new Error('Debe haber al menos una cancha')
   if (numPlayers < numCourts * BLOCK_SIZE) {
     throw new Error(`Mínimo ${numCourts * BLOCK_SIZE} jugadores (4 por cancha)`)
   }
-  const playersPerCourt = numPlayers / numCourts
-  if (!Number.isInteger(playersPerCourt)) {
-    throw new Error('El total de jugadores debe ser divisible por la cantidad de canchas')
+  const playersPerCourtByCourt = getPlayersPerCourtArray(numCourts, numPlayers)
+  if (!playersPerCourtByCourt || playersPerCourtByCourt.reduce((a, b) => a + b, 0) !== numPlayers) {
+    throw new Error('Error al calcular la distribución de jugadores')
   }
-  if (playersPerCourt % BLOCK_SIZE !== 0) {
-    throw new Error('Jugadores por cancha deben ser múltiplo de 4 (ej: 8, 12, 16, 20 por cancha)')
-  }
-  state.config = { numCourts, numPlayers, qualifyingDates: QUALIFYING_DATES }
+  state.config = { numCourts, numPlayers, playersPerCourtByCourt, qualifyingDates: QUALIFYING_DATES }
   state.players = []
   state.currentDate = 0
   state.dates = []
@@ -57,11 +73,16 @@ function addPlayers(names) {
   if (names.length !== state.config.numPlayers) {
     throw new Error(`Debes cargar exactamente ${state.config.numPlayers} jugadores`)
   }
-  const { numCourts, numPlayers } = state.config
-  const playersPerCourt = numPlayers / numCourts
+  const { numCourts, playersPerCourtByCourt } = state.config
   state.players = names.map((name, i) => {
-    const courtIndex = Math.floor(i / playersPerCourt)
-    const positionInCourt = (i % playersPerCourt) + 1
+    let courtIndex = 0
+    let acc = playersPerCourtByCourt[0]
+    while (i >= acc && courtIndex < numCourts - 1) {
+      courtIndex++
+      acc += playersPerCourtByCourt[courtIndex]
+    }
+    const offset = courtIndex > 0 ? playersPerCourtByCourt.slice(0, courtIndex).reduce((a, b) => a + b, 0) : 0
+    const positionInCourt = i - offset + 1
     return {
       id: `p-${i + 1}`,
       name: name.trim() || `Jugador ${i + 1}`,
@@ -150,10 +171,7 @@ function generateDateMatches() {
   }
   const dateIndex = state.currentDate - 1
   if (dateIndex < 0) throw new Error('Ronda inválida.')
-  const playersPerCourt = numPlayers / numCourts
-  if (playersPerCourt % BLOCK_SIZE !== 0) {
-    throw new Error('Jugadores por cancha deben ser múltiplo de 4.')
-  }
+  const { playersPerCourtByCourt } = state.config
 
   if (!state.dates || !Array.isArray(state.dates)) state.dates = []
 
@@ -166,15 +184,15 @@ function generateDateMatches() {
     completedMatchOrder: [],
   }
 
-  const numBlocksPerCourt = playersPerCourt / BLOCK_SIZE
-
   for (let c = 0; c < numCourts; c++) {
+    const expectedCount = playersPerCourtByCourt[c]
+    const numBlocksPerCourt = Math.floor(expectedCount / BLOCK_SIZE)
     const courtPlayers = state.players
       .filter((p) => p != null && p.courtIndex === c)
       .sort((a, b) => a.positionInCourt - b.positionInCourt)
-    if (courtPlayers.length !== playersPerCourt) {
+    if (courtPlayers.length !== expectedCount) {
       throw new Error(
-        `Cancha ${c + 1} tiene ${courtPlayers.length} jugadores (debería tener ${playersPerCourt}). Reiniciá el torneo desde Configuración.`
+        `Cancha ${c + 1} tiene ${courtPlayers.length} jugadores (debería tener ${expectedCount}). Reiniciá el torneo desde Configuración.`
       )
     }
     const restBlock = getRestBlockForDate(dateIndex, numBlocksPerCourt)
@@ -335,21 +353,20 @@ function shuffleWithSeed(arr, seed) {
 
 /**
  * Escalera circular: suben 2 (pos 1-2), bajan 2 (últimas 2).
- * Los que bajan de cancha 1 van a la 2, de la 2 a la 3, de la 3 a la 4, de la 4 a la 1.
- * Cada cancha queda siempre con 4 jugadores.
- * Tras asignar cancha, se mezclan los 4 jugadores para que cambien los equipos (1-2 vs 3-4 no se mantengan fijos).
+ * Los que bajan de cancha 1 van a la 2, de la 2 a la 3, etc. (circular).
+ * Los del medio se quedan. Tras asignar, se mezclan para variar equipos.
  */
 function applyLadderMovement(byCourt) {
   const numCourts = state.config.numCourts
   if (numCourts === 1) return
 
-  const playersPerCourt = state.config.numPlayers / numCourts
   const movements = []
   for (let c = 0; c < numCourts; c++) {
     const courtPlayers = (byCourt[c] || []).filter((p) => p != null && p.id != null)
     const up = courtPlayers.filter((_, i) => i < 2).map((p) => p.id).filter(Boolean)
     const down = courtPlayers.filter((_, i) => i >= courtPlayers.length - 2).map((p) => p.id).filter(Boolean)
-    movements.push({ up, down })
+    const middle = courtPlayers.slice(2, courtPlayers.length - 2).map((p) => p.id).filter(Boolean)
+    movements.push({ up, down, middle })
   }
 
   const idToPlayer = {}
@@ -360,11 +377,9 @@ function applyLadderMovement(byCourt) {
     const nextCourt = (c + 1) % numCourts
     let ids = [
       ...movements[prevCourt].down,
+      ...movements[c].middle,
       ...movements[nextCourt].up,
     ]
-    if (ids.length !== playersPerCourt) {
-      continue
-    }
     ids = shuffleWithSeed(ids, state.currentDate * 10 + c)
     ids.forEach((id, pos) => {
       const p = idToPlayer[id]

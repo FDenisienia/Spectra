@@ -334,7 +334,7 @@ export default function RoundView({
               </Alert>
             )}
             <Card className="mb-3">
-              <Card.Header>Cancha {c + 1} — {state.config.numPlayers / state.config.numCourts} jugadores (esta fecha)</Card.Header>
+              <Card.Header>Cancha {c + 1} — {(courtRankingThisDate[c] || []).length} jugadores (esta fecha)</Card.Header>
               <Card.Body className="p-0">
                 <Table responsive hover size="sm">
                   <thead>

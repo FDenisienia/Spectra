@@ -22,15 +22,6 @@ export default function TournamentConfig({ onSuccess, loading, error }) {
       setValidationError(`Mínimo ${courts * 4} jugadores (4 por cancha).`)
       return
     }
-    const playersPerCourt = players / courts
-    if (!Number.isInteger(playersPerCourt)) {
-      setValidationError('El total de jugadores debe ser divisible por la cantidad de canchas.')
-      return
-    }
-    if (playersPerCourt % 4 !== 0) {
-      setValidationError('Jugadores por cancha deben ser múltiplo de 4 (ej: 8, 12, 16, 20 por cancha).')
-      return
-    }
     onSuccess(courts, players)
   }
 
@@ -72,7 +63,7 @@ export default function TournamentConfig({ onSuccess, loading, error }) {
                   onChange={(e) => setNumPlayers(e.target.value === '' ? '' : Number(e.target.value))}
                 />
                 <Form.Text className="text-muted">
-                  Mínimo {minPlayers} (4 por cancha). Por cancha debe ser múltiplo de 4 (8, 12, 16, 20…).
+                  Mínimo {minPlayers} (4 por cancha). Se distribuyen automáticamente; pueden usarse 17, 18, 19… jugadores.
                 </Form.Text>
               </Form.Group>
             </Col>
