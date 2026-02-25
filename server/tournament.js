@@ -122,15 +122,53 @@ function getRotatedPairsForBlock(a, b, c, d) {
 }
 
 /**
- * Por cancha: N jugadores (múltiplo de 4). Un bloque de 4 descansa (solo si hay 2+ bloques), cada otro bloque = 1 partido.
- * Cada partido tiene 3 sets con rotación de parejas: cada jugador juega 1 set con cada uno de los otros 3.
+ * Índices de jugadores que descansan (bye) cuando la cancha tiene N impar.
+ * Rotación: en la fecha d, descansan los (N-4) jugadores en posiciones consecutivas cíclicas.
+ * Así todos descansan la misma cantidad de veces a lo largo del ciclo.
+ */
+function getRestIndicesForOddCourt(dateIndex, n) {
+  const restCount = n - BLOCK_SIZE
+  return Array.from({ length: restCount }, (_, j) => (dateIndex + j) % n)
+}
+
+/**
+ * Por cancha: 4 o más jugadores.
+ * - Si N es impar (5, 7, 9…): 1 partido con 4 jugadores; (N-4) en bye rotativo por fecha.
+ * - Si N es múltiplo de 4: bloques de 4; un bloque descansa (rotando) si hay 2+ bloques.
+ * Cada partido tiene 3 sets con rotación de parejas.
  */
 function generateMatchesForCourt(courtPlayers, dateIndex, courtIndex) {
   const safe = (courtPlayers || []).filter((p) => p != null && p.id != null)
   if (safe.length < BLOCK_SIZE) return []
-  const numBlocks = Math.floor(safe.length / BLOCK_SIZE)
-  const restBlock = getRestBlockForDate(dateIndex, numBlocks)
+  const n = safe.length
   const matches = []
+
+  if (n % 2 === 1) {
+    // Cancha impar: bye rotativo; los 4 que juegan son el resto
+    const restIndices = new Set(getRestIndicesForOddCourt(dateIndex, n))
+    const playing = safe.filter((_, i) => !restIndices.has(i))
+    if (playing.length !== BLOCK_SIZE) return matches
+    const [a, b, c, d] = playing.map((p) => p.id)
+    const rotated = getRotatedPairsForBlock(a, b, c, d)
+    matches.push({
+      id: `date${dateIndex + 1}-c${courtIndex}-b0`,
+      courtIndex,
+      blockIndex: 0,
+      pair1: [a, b],
+      pair2: [c, d],
+      sets: rotated.map(({ pair1, pair2 }) => ({
+        pair1,
+        pair2,
+        pair1Games: 0,
+        pair2Games: 0,
+      })),
+      completed: false,
+    })
+    return matches
+  }
+
+  const numBlocks = n / BLOCK_SIZE
+  const restBlock = getRestBlockForDate(dateIndex, numBlocks)
   for (let block = 0; block < numBlocks; block++) {
     if (numBlocks > 1 && block === restBlock) continue
     const base = block * BLOCK_SIZE
@@ -195,10 +233,15 @@ function generateDateMatches() {
         `Cancha ${c + 1} tiene ${courtPlayers.length} jugadores (debería tener ${expectedCount}). Reiniciá el torneo desde Configuración.`
       )
     }
-    const restBlock = getRestBlockForDate(dateIndex, numBlocksPerCourt)
-    dateData.restByCourt[c] = numBlocksPerCourt > 1
-      ? courtPlayers.slice(restBlock * BLOCK_SIZE, (restBlock + 1) * BLOCK_SIZE).map((p) => p.id)
-      : []
+    if (expectedCount % 2 === 1) {
+      const restIndices = getRestIndicesForOddCourt(dateIndex, expectedCount)
+      dateData.restByCourt[c] = restIndices.map((i) => courtPlayers[i].id)
+    } else {
+      const restBlock = getRestBlockForDate(dateIndex, numBlocksPerCourt)
+      dateData.restByCourt[c] = numBlocksPerCourt > 1
+        ? courtPlayers.slice(restBlock * BLOCK_SIZE, (restBlock + 1) * BLOCK_SIZE).map((p) => p.id)
+        : []
+    }
     dateData.courtAssignments[c] = courtPlayers.map((p) => p.id)
     const courtMatches = generateMatchesForCourt(courtPlayers, dateIndex, c)
     dateData.matches.push(...courtMatches)
