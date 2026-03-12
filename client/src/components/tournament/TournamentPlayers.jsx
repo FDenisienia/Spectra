@@ -30,12 +30,12 @@ export default function TournamentPlayers({ numPlayers, onSuccess, loading, erro
         <Form onSubmit={handleSubmit}>
           <Row xs={1} sm={2} md={3} lg={4}>
             {names.map((name, i) => (
-              <Col key={i} className="mb-2">
+              <Col key={i} className="mb-3">
                 <Form.Group>
-                  <Form.Label className="small">Jugador {i + 1}</Form.Label>
+                  <Form.Label className="small text-muted mb-1">{i + 1}</Form.Label>
                   <Form.Control
                     type="text"
-                    placeholder={`Jugador ${i + 1}`}
+                    placeholder={`Nombre (ej: María García)`}
                     value={name}
                     onChange={(e) => updateName(i, e.target.value)}
                   />

@@ -537,7 +537,7 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
 }
 
 .spectra-logo-topbar {
-  max-height: 2.5rem;
+  max-height: 3.5rem;
   width: auto;
 }
 
@@ -1101,22 +1101,67 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   margin-bottom: 0.5rem;
 }
 
-.tournament-logo img {
-  max-width: min(420px, 85vw);
-  width: auto;
-  height: auto;
-  object-fit: contain;
+/* Logos: mismo tamaño fijo para padel, hockey y fútbol */
+.tournament-logo {
+  --logo-width: min(300px, 85vw);
 }
 
 @media (min-width: 576px) {
-  .tournament-logo img {
-    max-width: min(420px, 38vw);
+  .tournament-logo {
+    --logo-width: min(400px, 38vw);
   }
 }
 
+.tournament-logo img {
+  width: var(--logo-width) !important;
+  min-width: var(--logo-width);
+  max-width: var(--logo-width);
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
 .tournament-logo--white img {
-  /* Forzar logo en blanco (pádel) sobre fondo azul */
   filter: brightness(0) invert(1);
+}
+
+/* Vista con fondo de cancha: título y botones claros para buen contraste */
+.tournament-view:has(.tournament-bg) .tournament-page-title h1,
+.tournament-view:has(.tournament-bg) .tournament-page-title .form-control {
+  color: #fff !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.tournament-view:has(.tournament-bg) .tournament-page-title .form-control {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.tournament-view:has(.tournament-bg) .tournament-page-title .form-control::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.tournament-view:has(.tournament-bg) .tournament-page-title .btn-outline-secondary {
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #fff;
+}
+
+.tournament-view:has(.tournament-bg) .tournament-page-title .btn-outline-secondary:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: #fff;
+  color: #fff;
+}
+
+.tournament-view:has(.tournament-bg) .btn-outline-danger {
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #fff;
+}
+
+.tournament-view:has(.tournament-bg) .btn-outline-danger:hover {
+  background: rgba(220, 53, 69, 0.9);
+  border-color: #dc3545;
+  color: #fff;
 }
 
 .tournament-content {
@@ -1167,6 +1212,38 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   font-weight: 500;
 }
 
+/* RoundView: texto informativo sin truncar */
+.round-view-info-text {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  white-space: normal;
+}
+
+/* Tabs con fondo: legibles sobre imagen de cancha */
+.tournament-view:has(.tournament-bg) .nav-tabs {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 0.25rem 0.25rem 0 0.25rem;
+  border-radius: var(--spectra-btn-radius);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.tournament-view:has(.tournament-bg) .nav-tabs .nav-link {
+  color: #334155;
+  border: none;
+  border-radius: 6px;
+  margin-bottom: 0.25rem;
+}
+
+.tournament-view:has(.tournament-bg) .nav-tabs .nav-link:hover {
+  color: var(--spectra-primary);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.tournament-view:has(.tournament-bg) .nav-tabs .nav-link.active {
+  background: var(--theme-primary, var(--spectra-primary));
+  color: #fff !important;
+}
+
 /* Tournament/RoundView tabs responsive */
 @media (max-width: 575.98px) {
   .tournament-view .nav-tabs {
@@ -1195,8 +1272,8 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   --theme-bg-alt: #ffffff;
   --theme-fg: #1a1a1a;
   --theme-muted: #555;
-  --font-display: Impact, 'Arial Black', sans-serif;
-  --font-body: 'Montserrat', sans-serif;
+  --font-display: 'Tomorrow', sans-serif;
+  --font-body: 'Tomorrow', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
   font-family: var(--font-body);
   min-height: 100%;
@@ -1210,6 +1287,7 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
 .tournament-view.theme-padel h1,
 .tournament-view.theme-padel .league-header h1 {
   font-family: var(--font-display);
+  font-weight: 700;
   color: var(--theme-fg);
   letter-spacing: 0.02em;
 }
@@ -1226,7 +1304,7 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-dark) 100%);
   color: #fff;
   font-family: var(--font-display);
-  font-weight: 400;
+  font-weight: 600;
   border: none;
 }
 
@@ -1284,8 +1362,8 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   --theme-bg-alt: #ffffff;
   --theme-fg: #000000;
   --theme-muted: #444;
-  --font-display: 'Montserrat', sans-serif;
-  --font-body: 'Montserrat', sans-serif;
+  --font-display: 'Tomorrow', sans-serif;
+  --font-body: 'Tomorrow', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
   font-family: var(--font-body);
   min-height: 100%;

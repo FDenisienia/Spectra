@@ -129,7 +129,7 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
   return (
     <div className="league-page">
       <Container className="league-page-container py-3 py-md-4 py-lg-5">
-        <TournamentLogo sport={tournament.sport} gender={tournament.gender} />
+        <TournamentLogo sport={tournament.sport} gender={tournament.gender} darkBg />
         <div className="league-header mb-4">
           <h1>{tournament.name || 'Liga'}</h1>
           <p className="subtitle mb-0">

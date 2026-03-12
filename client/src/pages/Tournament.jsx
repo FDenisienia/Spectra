@@ -222,7 +222,7 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
 
 
       <Container className="tournament-page-container py-3 py-md-4 py-lg-5">
-        <TournamentLogo sport={tournament.sport || 'padel'} gender={tournament.gender} />
+        <TournamentLogo sport={tournament.sport || 'padel'} gender={tournament.gender} darkBg={!isAdmin} />
         <div className="mb-4 d-flex align-items-center flex-wrap gap-2 tournament-page-title">
           {isAdmin && editingName ? (
             <Form onSubmit={handleSaveName} className="d-flex align-items-center gap-2 flex-wrap w-100">

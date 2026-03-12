@@ -133,7 +133,7 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
             ← Volver al torneo
           </Button>
         </div>
-        <TournamentLogo sport={tournament.sport} gender={tournament.gender} />
+        <TournamentLogo sport={tournament.sport} gender={tournament.gender} darkBg />
         <div className="league-header mb-4">
           <h1>{data?.team?.name ?? (isPadel ? 'Pareja' : 'Equipo')}</h1>
           <p className="subtitle mb-0 text-muted">

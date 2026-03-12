@@ -178,11 +178,11 @@ export default function RoundView({
             )}
           </span>
         </Card.Header>
-        <Card.Body className="py-2 bg-light small">
+        <Card.Body className="py-2 px-3 bg-light small round-view-info-text">
           {isQualifyingPhase
             ? `Fechas 1 a ${qualifyingDates}: clasificatorias. No hay movimientos de cancha hasta terminar la fecha ${qualifyingDates}; después se aplica la escalera. `
             : ''}
-          En cada cancha descansan 4 jugadores por fecha (un bloque); la rotación se repite según la cantidad de bloques por cancha.
+          En cada cancha descansan 4 jugadores por fecha (un bloque). La rotación se repite según la cantidad de bloques por cancha.
         </Card.Body>
       </Card>
 
