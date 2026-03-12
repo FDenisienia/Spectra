@@ -5,6 +5,7 @@ import AdminTournamentRouter from './components/AdminTournamentRouter'
 import PublicLayout from './components/PublicLayout'
 import PublicHome from './pages/PublicHome'
 import AdminDashboard from './pages/AdminDashboard'
+import AdminHome from './pages/AdminHome'
 import Login from './pages/Login'
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
       <Route path="/torneo" element={<Navigate to="/" replace />} />
       <Route path="/admin/login" element={<Login />} />
       <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
+      <Route path="/admin/home" element={<RequireAuth><AdminHome /></RequireAuth>} />
       <Route path="/admin/torneo/:id" element={<RequireAuth><AdminTournamentRouter /></RequireAuth>} />
       <Route path="/admin/*" element={<Navigate to="/admin" replace />} />
     </Routes>

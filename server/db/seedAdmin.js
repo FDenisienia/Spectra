@@ -12,7 +12,7 @@ export async function seedAdmin() {
   const username = process.env.ADMIN_USERNAME || DEFAULT_USER
   const password = process.env.ADMIN_PASSWORD || DEFAULT_PASSWORD
   const hash = await bcrypt.hash(password, 10)
-  const [rows] = await pool.query('SELECT id FROM admin_user LIMIT 1')
+  const [rows] = await pool.query('SELECT id FROM admin_user WHERE username = ? LIMIT 1', [username])
   if (rows.length === 0) {
     await pool.query(
       'INSERT INTO admin_user (username, password_hash) VALUES (?, ?)',
@@ -20,7 +20,7 @@ export async function seedAdmin() {
     )
     console.log('[Spectra] Admin creado (username:', username, ')')
   } else {
-    await pool.query('UPDATE admin_user SET password_hash = ? WHERE id = ?', [hash, rows[0].id])
+    await pool.query('UPDATE admin_user SET password_hash = ? WHERE username = ?', [hash, username])
     console.log('[Spectra] Admin actualizado (username:', username, ')')
   }
 }

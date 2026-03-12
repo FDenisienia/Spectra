@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Container, Card, Spinner, Alert, ListGroup, Table, Button, Row, Col } from 'react-bootstrap'
 import * as api from '../api/league'
 import TeamDetail from './TeamDetail'
+import TournamentLogo from '../components/tournament/TournamentLogo'
 import '../styles/League.css'
 
 export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
@@ -95,7 +96,7 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
   const ZoneFilter = () =>
     zones.length > 0 ? (
       <Card className="mb-4 league-zone-filter">
-        <Card.Body className="py-3 px-4">
+        <Card.Body className="py-3 px-3 px-sm-4">
           <span className="text-muted small me-2 fw-medium">{zoneLabel}:</span>
           {zones.map((z) => (
             <Button
@@ -127,11 +128,13 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
 
   return (
     <div className="league-page">
-      <Container className="league-page-container py-4 py-lg-5">
+      <Container className="league-page-container py-3 py-md-4 py-lg-5">
+        <TournamentLogo sport={tournament.sport} gender={tournament.gender} />
         <div className="league-header mb-4">
           <h1>{tournament.name || 'Liga'}</h1>
           <p className="subtitle mb-0">
             {tournament.sport === 'futbol' ? 'Fútbol' : tournament.sport === 'hockey' ? 'Hockey' : 'Pádel'}
+            {tournament.sport === 'futbol' && tournament.gender && ` · ${tournament.gender === 'masculino' ? 'Masculino' : tournament.gender === 'femenino' ? 'Femenino' : 'Mixto'}`}
             {tournament.status === 'active' ? ' · Activo' : tournament.status === 'finished' ? ' · Finalizado' : ''}
           </p>
         </div>

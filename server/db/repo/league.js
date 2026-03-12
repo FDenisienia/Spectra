@@ -1,4 +1,12 @@
 import { pool } from '../index.js'
+import * as tournamentsRepo from './tournaments.js'
+import {
+  getDisciplineRules,
+  getYellowThreshold,
+  getGreenThreshold,
+  getReasonLabel,
+  SUSPENSION_REASONS,
+} from '../../services/disciplineRules.js'
 
 function genId(prefix) {
   return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9)
@@ -519,6 +527,22 @@ export async function createMatch(matchdayId, home_team_id, away_team_id, played
 }
 
 export async function updateMatch(matchId, data) {
+  let tournamentId = null
+  let homeTeamId = null
+  let awayTeamId = null
+  if (data.status === 'played') {
+    const [matchRows] = await pool.query(
+      `SELECT md.tournament_id, m.home_team_id, m.away_team_id, m.status FROM league_matches m JOIN league_matchdays md ON m.matchday_id = md.id WHERE m.id = ?`,
+      [matchId]
+    )
+    const m = matchRows[0]
+    if (m && m.status !== 'played') {
+      tournamentId = m.tournament_id
+      homeTeamId = m.home_team_id
+      awayTeamId = m.away_team_id
+    }
+  }
+
   const updates = []
   const params = []
   if (data.home_score !== undefined) {
@@ -548,6 +572,12 @@ export async function updateMatch(matchId, data) {
   if (updates.length === 0) return null
   params.push(matchId)
   await pool.query(`UPDATE league_matches SET ${updates.join(', ')} WHERE id = ?`, params)
+
+  if (tournamentId && homeTeamId && awayTeamId) {
+    await incrementSuspensionDatesForTeam(tournamentId, homeTeamId, { excludeFromMatchId: matchId })
+    await incrementSuspensionDatesForTeam(tournamentId, awayTeamId, { excludeFromMatchId: matchId })
+  }
+
   const [rows] = await pool.query(
     `SELECT m.id, m.matchday_id, m.home_team_id, m.away_team_id, m.home_score, m.away_score, m.played_at, m.status
      FROM league_matches m WHERE m.id = ?`,
@@ -571,11 +601,18 @@ export async function getGoalsByMatch(matchId) {
 }
 
 export async function addGoal(matchId, { player_name, team_id, goals }) {
+  const tournamentId = await getTournamentIdFromMatch(matchId)
+  if (tournamentId) {
+    const pn = (player_name || '').trim()
+    if (pn && team_id && (await isPlayerSuspended(tournamentId, pn, team_id))) {
+      throw new Error('El jugador está suspendido y no puede participar en este partido.')
+    }
+  }
   const id = genId('g')
   const qty = Math.max(1, Number(goals) || 1)
   await pool.query(
     'INSERT INTO league_goals (id, match_id, player_name, team_id, goals) VALUES (?, ?, ?, ?, ?)',
-    [id, matchId, player_name, team_id, qty]
+    [id, matchId, (player_name || '').trim(), team_id, qty]
   )
   const [rows] = await pool.query('SELECT id, match_id, player_name, team_id, COALESCE(goals, 1) AS goals FROM league_goals WHERE id = ?', [id])
   return { ...rows[0], goals: Number(rows[0].goals) }
@@ -584,6 +621,235 @@ export async function addGoal(matchId, { player_name, team_id, goals }) {
 export async function deleteGoal(goalId) {
   const [r] = await pool.query('DELETE FROM league_goals WHERE id = ?', [goalId])
   return r.affectedRows > 0
+}
+
+// --- Suspensions ---
+async function getTournamentIdFromMatch(matchId) {
+  const [rows] = await pool.query(
+    'SELECT md.tournament_id FROM league_matches m JOIN league_matchdays md ON m.matchday_id = md.id WHERE m.id = ?',
+    [matchId]
+  )
+  return rows[0]?.tournament_id ?? null
+}
+
+async function getTournamentIdFromPlayoffMatch(playoffMatchId) {
+  const [rows] = await pool.query(
+    'SELECT pr.tournament_id FROM league_playoff_matches pm JOIN league_playoff_rounds pr ON pm.round_id = pr.id WHERE pm.id = ?',
+    [playoffMatchId]
+  )
+  return rows[0]?.tournament_id ?? null
+}
+
+/** Jugador está suspendido si tiene alguna suspensión con dates_served < dates_total */
+export async function isPlayerSuspended(tournamentId, playerName, teamId) {
+  const [rows] = await pool.query(
+    `SELECT id FROM league_suspensions WHERE tournament_id = ? AND player_name = ? AND team_id = ? AND dates_served < dates_total`,
+    [tournamentId, playerName, teamId]
+  )
+  return rows.length > 0
+}
+
+/** Obtener Set de jugadores suspendidos para un torneo y lista de teamIds */
+export async function getSuspendedPlayersSet(tournamentId, teamIds) {
+  if (!teamIds?.length) return new Set()
+  const placeholders = teamIds.map(() => '?').join(',')
+  const [rows] = await pool.query(
+    `SELECT player_name, team_id FROM league_suspensions WHERE tournament_id = ? AND team_id IN (${placeholders}) AND dates_served < dates_total`,
+    [tournamentId, ...teamIds]
+  )
+  return new Set(rows.map((r) => `${r.player_name}::${r.team_id}`))
+}
+
+/** Incrementar dates_served para todos los jugadores de un equipo cuando el equipo juega.
+ * La sanción se aplica a la PRÓXIMA fecha: no se cuenta el partido donde se cometió la falta.
+ * excludeFromMatchId / excludeFromPlayoffMatchId: no incrementar suspensiones generadas en ese partido.
+ * Cuando una suspensión por roja directa se completa, se elimina la tarjeta del jugador. */
+export async function incrementSuspensionDatesForTeam(tournamentId, teamId, { excludeFromMatchId = null, excludeFromPlayoffMatchId = null } = {}) {
+  let sql = `UPDATE league_suspensions SET dates_served = LEAST(dates_served + 1, dates_total) WHERE tournament_id = ? AND team_id = ? AND dates_served < dates_total`
+  const params = [tournamentId, teamId]
+  if (excludeFromMatchId) {
+    sql += ' AND (match_id IS NULL OR match_id != ?)'
+    params.push(excludeFromMatchId)
+  }
+  if (excludeFromPlayoffMatchId) {
+    sql += ' AND (playoff_match_id IS NULL OR playoff_match_id != ?)'
+    params.push(excludeFromPlayoffMatchId)
+  }
+  await pool.query(sql, params)
+  // Al completar una suspensión por roja directa, limpiar la tarjeta del jugador
+  const [completed] = await pool.query(
+    `SELECT id, player_name, team_id, match_id, playoff_match_id FROM league_suspensions
+     WHERE tournament_id = ? AND team_id = ? AND reason = 'red_direct' AND dates_served >= dates_total
+     AND (match_id IS NOT NULL OR playoff_match_id IS NOT NULL)`,
+    [tournamentId, teamId]
+  )
+  for (const s of completed) {
+    if (s.match_id) {
+      await pool.query(
+        "DELETE FROM league_cards WHERE match_id = ? AND player_name = ? AND team_id = ? AND card_type = 'red'",
+        [s.match_id, s.player_name, s.team_id]
+      )
+    }
+    if (s.playoff_match_id) {
+      await pool.query(
+        "DELETE FROM league_playoff_cards WHERE playoff_match_id = ? AND player_name = ? AND team_id = ? AND card_type = 'red'",
+        [s.playoff_match_id, s.player_name, s.team_id]
+      )
+    }
+  }
+}
+
+/** Listar suspensiones del torneo (activas e historial) */
+export async function getSuspensions(tournamentId, { activeOnly = false, sport = null } = {}) {
+  let sql = `SELECT s.id, s.tournament_id, s.player_name, s.team_id, t.name AS team_name, s.match_id, s.reason, s.dates_total, s.dates_served, s.created_at
+     FROM league_suspensions s JOIN league_teams t ON s.team_id = t.id WHERE s.tournament_id = ?`
+  if (activeOnly) {
+    sql += ' AND s.dates_served < s.dates_total'
+  }
+  sql += ' ORDER BY s.created_at DESC'
+  const [rows] = await pool.query(sql, [tournamentId])
+  return rows.map((r) => ({
+    id: r.id,
+    player_name: r.player_name,
+    team_id: r.team_id,
+    team_name: r.team_name,
+    match_id: r.match_id,
+    reason: r.reason,
+    reason_label: getReasonLabel(r.reason),
+    dates_total: r.dates_total,
+    dates_served: r.dates_served,
+    dates_pending: Math.max(0, r.dates_total - r.dates_served),
+    is_active: r.dates_served < r.dates_total,
+    created_at: r.created_at,
+  }))
+}
+
+const CARD_LABELS = { yellow: 'Amarilla', red: 'Roja', green: 'Verde' }
+
+/** Historial disciplinario: tarjetas + suspensiones con contexto. Incluye fase de grupos y playoffs. */
+export async function getDisciplineHistory(tournamentId, { zoneId = null } = {}) {
+  const suspensions = await getSuspensions(tournamentId, { activeOnly: false })
+  let cardsSql = `SELECT c.id, c.match_id, NULL AS playoff_match_id, c.player_name, c.team_id, t.name AS team_name, c.card_type, md.number AS matchday_number, m.played_at
+     FROM league_cards c
+     JOIN league_matches m ON c.match_id = m.id
+     JOIN league_matchdays md ON m.matchday_id = md.id
+     JOIN league_teams t ON c.team_id = t.id
+     WHERE md.tournament_id = ?`
+  const cardsParams = [tournamentId]
+  if (zoneId) {
+    cardsSql += ' AND (m.zone_id = ? OR t.zone_id = ?)'
+    cardsParams.push(zoneId, zoneId)
+  }
+  cardsSql += ' ORDER BY md.number, c.id'
+  const [cardsRows] = await pool.query(cardsSql, cardsParams)
+
+  let playoffSql = `SELECT c.id, NULL AS match_id, c.playoff_match_id, c.player_name, c.team_id, t.name AS team_name, c.card_type, pr.name AS matchday_number, pm.played_at
+     FROM league_playoff_cards c
+     JOIN league_playoff_matches pm ON c.playoff_match_id = pm.id
+     JOIN league_playoff_rounds pr ON pm.round_id = pr.id
+     JOIN league_teams t ON c.team_id = t.id
+     WHERE pr.tournament_id = ?`
+  const playoffParams = [tournamentId]
+  if (zoneId) {
+    playoffSql += ' AND (t.zone_id = ?)'
+    playoffParams.push(zoneId)
+  }
+  playoffSql += ' ORDER BY pr.sort_order, c.id'
+  const [playoffRows] = await pool.query(playoffSql, playoffParams)
+
+  const byPlayer = {}
+  for (const c of [...cardsRows, ...playoffRows]) {
+    const key = `${c.player_name}::${c.team_id}`
+    if (!byPlayer[key]) byPlayer[key] = { player_name: c.player_name, team_id: c.team_id, team_name: c.team_name, cards: [], suspensions: [] }
+    byPlayer[key].cards.push({
+      ...c,
+      card_label: CARD_LABELS[c.card_type] ?? c.card_type,
+      played_at: c.played_at,
+    })
+  }
+  for (const s of suspensions) {
+    const key = `${s.player_name}::${s.team_id}`
+    if (!byPlayer[key]) byPlayer[key] = { player_name: s.player_name, team_id: s.team_id, team_name: s.team_name, cards: [], suspensions: [] }
+    byPlayer[key].suspensions.push(s)
+  }
+  return Object.values(byPlayer).filter((p) => p.cards.length > 0 || p.suspensions.length > 0)
+}
+
+/** Crear suspensión */
+async function createSuspension(tournamentId, { player_name, team_id, match_id, playoff_match_id, reason, dates_total }) {
+  const id = genId('susp')
+  const pn = (player_name || '').trim()
+  const dt = Math.max(1, Math.min(3, dates_total || 1))
+  await pool.query(
+    'INSERT INTO league_suspensions (id, tournament_id, player_name, team_id, match_id, playoff_match_id, reason, dates_total, dates_served) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)',
+    [id, tournamentId, pn, team_id, match_id || null, playoff_match_id || null, reason, dt]
+  )
+  return id
+}
+
+/**
+ * Contar tarjetas efectivas por tipo (descontando las que ya generaron suspensión).
+ * Incluye fase de grupos y playoffs.
+ * @returns {{ yellow: number, green: number }}
+ */
+async function getEffectiveCardCounts(tournamentId, sport, playerName, teamId) {
+  const yellowThreshold = getYellowThreshold(sport)
+  const greenThreshold = getGreenThreshold(sport)
+
+  const [[groupY], [playoffY], [groupG], [playoffG], [suspYellow], [suspGreen]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS cnt FROM league_cards c
+       JOIN league_matches m ON c.match_id = m.id
+       JOIN league_matchdays md ON m.matchday_id = md.id
+       WHERE md.tournament_id = ? AND c.player_name = ? AND c.team_id = ? AND c.card_type = 'yellow'`,
+      [tournamentId, playerName, teamId]
+    ),
+    pool.query(
+      `SELECT COUNT(*) AS cnt FROM league_playoff_cards c
+       JOIN league_playoff_matches pm ON c.playoff_match_id = pm.id
+       JOIN league_playoff_rounds pr ON pm.round_id = pr.id
+       WHERE pr.tournament_id = ? AND c.player_name = ? AND c.team_id = ? AND c.card_type = 'yellow'`,
+      [tournamentId, playerName, teamId]
+    ),
+    greenThreshold != null
+      ? pool.query(
+          `SELECT COUNT(*) AS cnt FROM league_cards c
+           JOIN league_matches m ON c.match_id = m.id
+           JOIN league_matchdays md ON m.matchday_id = md.id
+           WHERE md.tournament_id = ? AND c.player_name = ? AND c.team_id = ? AND c.card_type = 'green'`,
+          [tournamentId, playerName, teamId]
+        )
+      : [{ cnt: 0 }],
+    greenThreshold != null
+      ? pool.query(
+          `SELECT COUNT(*) AS cnt FROM league_playoff_cards c
+           JOIN league_playoff_matches pm ON c.playoff_match_id = pm.id
+           JOIN league_playoff_rounds pr ON pm.round_id = pr.id
+           WHERE pr.tournament_id = ? AND c.player_name = ? AND c.team_id = ? AND c.card_type = 'green'`,
+          [tournamentId, playerName, teamId]
+        )
+      : [{ cnt: 0 }],
+    pool.query(
+      `SELECT COUNT(*) AS cnt FROM league_suspensions WHERE tournament_id = ? AND player_name = ? AND team_id = ? AND reason = 'yellow_accumulation'`,
+      [tournamentId, playerName, teamId]
+    ),
+    greenThreshold != null
+      ? pool.query(
+          `SELECT COUNT(*) AS cnt FROM league_suspensions WHERE tournament_id = ? AND player_name = ? AND team_id = ? AND reason = 'green_accumulation'`,
+          [tournamentId, playerName, teamId]
+        )
+      : [{ cnt: 0 }],
+  ])
+
+  const totalYellows = Number(groupY[0]?.cnt ?? 0) + Number(playoffY[0]?.cnt ?? 0)
+  const totalGreens = Number(groupG[0]?.cnt ?? 0) + Number(playoffG[0]?.cnt ?? 0)
+  const suspensionsYellow = Number(suspYellow[0]?.cnt ?? 0)
+  const suspensionsGreen = Number(suspGreen[0]?.cnt ?? 0)
+
+  const yellow = Math.max(0, totalYellows - yellowThreshold * suspensionsYellow)
+  const green = greenThreshold != null ? Math.max(0, totalGreens - greenThreshold * suspensionsGreen) : 0
+
+  return { yellow, green }
 }
 
 // --- Cards ---
@@ -627,12 +893,45 @@ export async function getCardsByMatchIds(matchIds) {
   return byMatch
 }
 
-export async function addCard(matchId, { player_name, team_id, card_type }) {
+export async function addCard(matchId, { player_name, team_id, card_type, suspension_dates }) {
+  const tournamentId = await getTournamentIdFromMatch(matchId)
+  if (!tournamentId) throw new Error('Partido no encontrado')
+
+  const t = await tournamentsRepo.getById(tournamentId)
+  const sport = t?.sport ?? 'futbol'
+  const rules = getDisciplineRules(sport)
+
+  const pn = (player_name || '').trim()
+  if (!pn || !team_id) throw new Error('Jugador y equipo requeridos')
+
+  if (!['yellow', 'red', 'green'].includes(card_type)) throw new Error('Tipo de tarjeta inválido')
+  if (card_type === 'green' && !rules.has_green) throw new Error('La tarjeta verde solo aplica a torneos de hockey')
+
+  if (await isPlayerSuspended(tournamentId, pn, team_id)) {
+    throw new Error('El jugador está suspendido y no puede participar en este partido.')
+  }
+
   const id = genId('c')
   await pool.query(
     'INSERT INTO league_cards (id, match_id, player_name, team_id, card_type) VALUES (?, ?, ?, ?, ?)',
-    [id, matchId, player_name, team_id, card_type]
+    [id, matchId, pn, team_id, card_type]
   )
+
+  const counts = await getEffectiveCardCounts(tournamentId, sport, pn, team_id)
+
+  if (card_type === 'yellow') {
+    if (counts.yellow >= getYellowThreshold(sport)) {
+      await createSuspension(tournamentId, { player_name: pn, team_id, match_id: matchId, reason: SUSPENSION_REASONS.YELLOW_ACCUMULATION, dates_total: 1 })
+    }
+  } else if (card_type === 'green') {
+    if (counts.green >= getGreenThreshold(sport)) {
+      await createSuspension(tournamentId, { player_name: pn, team_id, match_id: matchId, reason: SUSPENSION_REASONS.GREEN_ACCUMULATION, dates_total: 1 })
+    }
+  } else if (card_type === 'red') {
+    const datesTotal = Math.max(1, Math.min(3, Number(suspension_dates) || 1))
+    await createSuspension(tournamentId, { player_name: pn, team_id, match_id: matchId, playoff_match_id: null, reason: SUSPENSION_REASONS.RED_DIRECT, dates_total: datesTotal })
+  }
+
   const [rows] = await pool.query('SELECT id, match_id, player_name, team_id, card_type FROM league_cards WHERE id = ?', [id])
   return rows[0]
 }
@@ -834,7 +1133,8 @@ export async function getScorersGlobal(tournamentId, { zoneId = null } = {}) {
 export async function getDiscipline(tournamentId, { zoneId = null } = {}) {
   let sql = `SELECT c.player_name, c.team_id, t.name AS team_name,
        SUM(CASE WHEN c.card_type = 'yellow' THEN 1 ELSE 0 END) AS yellow,
-       SUM(CASE WHEN c.card_type = 'red' THEN 1 ELSE 0 END) AS red
+       SUM(CASE WHEN c.card_type = 'red' THEN 1 ELSE 0 END) AS red,
+       SUM(CASE WHEN c.card_type = 'green' THEN 1 ELSE 0 END) AS green
      FROM league_cards c
      JOIN league_matches m ON c.match_id = m.id
      JOIN league_matchdays md ON m.matchday_id = md.id
@@ -846,8 +1146,8 @@ export async function getDiscipline(tournamentId, { zoneId = null } = {}) {
     params.push(zoneId, zoneId)
   }
   sql += ` GROUP BY c.player_name, c.team_id, t.name
-     HAVING yellow > 0 OR red > 0
-     ORDER BY red DESC, yellow DESC`
+     HAVING yellow > 0 OR red > 0 OR green > 0
+     ORDER BY red DESC, yellow DESC, green DESC`
   const [rows] = await pool.query(sql, params)
   return rows.map((r) => ({
     player_name: r.player_name,
@@ -855,6 +1155,7 @@ export async function getDiscipline(tournamentId, { zoneId = null } = {}) {
     team_name: r.team_name,
     yellow: Number(r.yellow),
     red: Number(r.red),
+    green: Number(r.green ?? 0),
   }))
 }
 
@@ -864,28 +1165,30 @@ export async function getDisciplineGlobal(tournamentId, { zoneId = null } = {}) 
   const [playoffRows] = await pool.query(
     `SELECT c.player_name, c.team_id, t.name AS team_name,
        SUM(CASE WHEN c.card_type = 'yellow' THEN 1 ELSE 0 END) AS yellow,
-       SUM(CASE WHEN c.card_type = 'red' THEN 1 ELSE 0 END) AS red
+       SUM(CASE WHEN c.card_type = 'red' THEN 1 ELSE 0 END) AS red,
+       SUM(CASE WHEN c.card_type = 'green' THEN 1 ELSE 0 END) AS green
      FROM league_playoff_cards c
      JOIN league_playoff_matches pm ON c.playoff_match_id = pm.id
      JOIN league_playoff_rounds pr ON pm.round_id = pr.id
      JOIN league_teams t ON c.team_id = t.id
      WHERE pr.tournament_id = ?
      GROUP BY c.player_name, c.team_id, t.name
-     HAVING yellow > 0 OR red > 0`,
+     HAVING yellow > 0 OR red > 0 OR green > 0`,
     [tournamentId]
   )
   const combined = {}
   for (const r of fromGroup) {
     const key = `${r.player_name}-${r.team_id}`
-    combined[key] = { ...r, yellow: r.yellow, red: r.red }
+    combined[key] = { ...r, yellow: r.yellow, red: r.red, green: r.green ?? 0 }
   }
   for (const r of playoffRows) {
     const key = `${r.player_name}-${r.team_id}`
-    if (!combined[key]) combined[key] = { player_name: r.player_name, team_id: r.team_id, team_name: r.team_name, yellow: 0, red: 0 }
+    if (!combined[key]) combined[key] = { player_name: r.player_name, team_id: r.team_id, team_name: r.team_name, yellow: 0, red: 0, green: 0 }
     combined[key].yellow += Number(r.yellow)
     combined[key].red += Number(r.red)
+    combined[key].green += Number(r.green ?? 0)
   }
-  return Object.values(combined).sort((a, b) => b.red - a.red || b.yellow - a.yellow)
+  return Object.values(combined).sort((a, b) => b.red - a.red || b.yellow - a.yellow || (b.green ?? 0) - (a.green ?? 0))
 }
 
 // --- Scorers by team (internal ranking) ---
@@ -911,27 +1214,45 @@ export async function getScorersByTeam(tournamentId, teamId) {
 
 // --- Discipline by team (internal ranking) ---
 export async function getDisciplineByTeam(tournamentId, teamId) {
-  const [rows] = await pool.query(
+  const [groupRows] = await pool.query(
     `SELECT c.player_name, c.team_id, t.name AS team_name,
        SUM(CASE WHEN c.card_type = 'yellow' THEN 1 ELSE 0 END) AS yellow,
-       SUM(CASE WHEN c.card_type = 'red' THEN 1 ELSE 0 END) AS red
+       SUM(CASE WHEN c.card_type = 'red' THEN 1 ELSE 0 END) AS red,
+       SUM(CASE WHEN c.card_type = 'green' THEN 1 ELSE 0 END) AS green
      FROM league_cards c
      JOIN league_matches m ON c.match_id = m.id
      JOIN league_matchdays md ON m.matchday_id = md.id
      JOIN league_teams t ON c.team_id = t.id
      WHERE md.tournament_id = ? AND c.team_id = ?
      GROUP BY c.player_name, c.team_id, t.name
-     HAVING yellow > 0 OR red > 0
-     ORDER BY red DESC, yellow DESC`,
+     HAVING yellow > 0 OR red > 0 OR green > 0`,
     [tournamentId, teamId]
   )
-  return rows.map((r) => ({
-    player_name: r.player_name,
-    team_id: r.team_id,
-    team_name: r.team_name,
-    yellow: Number(r.yellow),
-    red: Number(r.red),
-  }))
+  const [playoffRows] = await pool.query(
+    `SELECT c.player_name, c.team_id, t.name AS team_name,
+       SUM(CASE WHEN c.card_type = 'yellow' THEN 1 ELSE 0 END) AS yellow,
+       SUM(CASE WHEN c.card_type = 'red' THEN 1 ELSE 0 END) AS red,
+       SUM(CASE WHEN c.card_type = 'green' THEN 1 ELSE 0 END) AS green
+     FROM league_playoff_cards c
+     JOIN league_playoff_matches pm ON c.playoff_match_id = pm.id
+     JOIN league_playoff_rounds pr ON pm.round_id = pr.id
+     JOIN league_teams t ON c.team_id = t.id
+     WHERE pr.tournament_id = ? AND c.team_id = ?
+     GROUP BY c.player_name, c.team_id, t.name
+     HAVING yellow > 0 OR red > 0 OR green > 0`,
+    [tournamentId, teamId]
+  )
+  const combined = {}
+  for (const r of [...groupRows, ...playoffRows]) {
+    const key = `${r.player_name}-${r.team_id}`
+    if (!combined[key]) combined[key] = { player_name: r.player_name, team_id: r.team_id, team_name: r.team_name, yellow: 0, red: 0, green: 0 }
+    combined[key].yellow += Number(r.yellow)
+    combined[key].red += Number(r.red)
+    combined[key].green += Number(r.green ?? 0)
+  }
+  return Object.values(combined)
+    .filter((r) => r.yellow > 0 || r.red > 0 || r.green > 0)
+    .sort((a, b) => b.red - a.red || b.yellow - a.yellow || (b.green ?? 0) - (a.green ?? 0))
 }
 
 // --- Next, previous and current match for a team ---
@@ -1105,6 +1426,22 @@ export async function createPlayoffMatch(roundId, { home_team_id, away_team_id, 
 }
 
 export async function updatePlayoffMatch(matchId, { home_score, away_score, status, played_at }) {
+  let tournamentId = null
+  let homeTeamId = null
+  let awayTeamId = null
+  if (status === 'played') {
+    const [rows] = await pool.query(
+      `SELECT pr.tournament_id, pm.home_team_id, pm.away_team_id, pm.status FROM league_playoff_matches pm JOIN league_playoff_rounds pr ON pm.round_id = pr.id WHERE pm.id = ?`,
+      [matchId]
+    )
+    const m = rows[0]
+    if (m && m.status !== 'played' && m.home_team_id && m.away_team_id) {
+      tournamentId = m.tournament_id
+      homeTeamId = m.home_team_id
+      awayTeamId = m.away_team_id
+    }
+  }
+
   const updates = []
   const params = []
   if (home_score !== undefined) {
@@ -1126,6 +1463,12 @@ export async function updatePlayoffMatch(matchId, { home_score, away_score, stat
   if (updates.length === 0) return null
   params.push(matchId)
   await pool.query(`UPDATE league_playoff_matches SET ${updates.join(', ')} WHERE id = ?`, params)
+
+  if (tournamentId && homeTeamId && awayTeamId) {
+    await incrementSuspensionDatesForTeam(tournamentId, homeTeamId, { excludeFromPlayoffMatchId: matchId })
+    await incrementSuspensionDatesForTeam(tournamentId, awayTeamId, { excludeFromPlayoffMatchId: matchId })
+  }
+
   const [rows] = await pool.query('SELECT id, home_team_id, away_team_id, home_score, away_score, winner_advances_to_match_id, winner_advances_as FROM league_playoff_matches WHERE id = ?', [matchId])
   return rows[0] || null
 }
@@ -1397,6 +1740,13 @@ export async function getPlayoffGoalsByMatch(playoffMatchId) {
 }
 
 export async function addPlayoffGoal(playoffMatchId, { player_name, team_id, goals }) {
+  const tournamentId = await getTournamentIdFromPlayoffMatch(playoffMatchId)
+  if (tournamentId) {
+    const pn = (player_name || '').trim()
+    if (pn && team_id && (await isPlayerSuspended(tournamentId, pn, team_id))) {
+      throw new Error('El jugador está suspendido y no puede participar en este partido.')
+    }
+  }
   const id = genId('pg')
   const qty = Math.max(1, Number(goals) || 1)
   await pool.query(
@@ -1415,12 +1765,45 @@ export async function getPlayoffCardsByMatch(playoffMatchId) {
   return rows
 }
 
-export async function addPlayoffCard(playoffMatchId, { player_name, team_id, card_type }) {
+export async function addPlayoffCard(playoffMatchId, { player_name, team_id, card_type, suspension_dates }) {
+  const tournamentId = await getTournamentIdFromPlayoffMatch(playoffMatchId)
+  if (!tournamentId) throw new Error('Partido no encontrado')
+
+  const t = await tournamentsRepo.getById(tournamentId)
+  const sport = t?.sport ?? 'futbol'
+  const rules = getDisciplineRules(sport)
+
+  const pn = (player_name || '').trim()
+  if (!pn || !team_id) throw new Error('Jugador y equipo requeridos')
+
+  if (!['yellow', 'red', 'green'].includes(card_type)) throw new Error('Tipo de tarjeta inválido')
+  if (card_type === 'green' && !rules.has_green) throw new Error('La tarjeta verde solo aplica a torneos de hockey')
+
+  if (await isPlayerSuspended(tournamentId, pn, team_id)) {
+    throw new Error('El jugador está suspendido y no puede participar en este partido.')
+  }
+
   const id = genId('pc')
   await pool.query(
     'INSERT INTO league_playoff_cards (id, playoff_match_id, player_name, team_id, card_type) VALUES (?, ?, ?, ?, ?)',
-    [id, playoffMatchId, player_name, team_id, card_type]
+    [id, playoffMatchId, pn, team_id, card_type]
   )
+
+  const counts = await getEffectiveCardCounts(tournamentId, sport, pn, team_id)
+
+  if (card_type === 'yellow') {
+    if (counts.yellow >= getYellowThreshold(sport)) {
+      await createSuspension(tournamentId, { player_name: pn, team_id, match_id: null, playoff_match_id: playoffMatchId, reason: SUSPENSION_REASONS.YELLOW_ACCUMULATION, dates_total: 1 })
+    }
+  } else if (card_type === 'green') {
+    if (counts.green >= getGreenThreshold(sport)) {
+      await createSuspension(tournamentId, { player_name: pn, team_id, match_id: null, playoff_match_id: playoffMatchId, reason: SUSPENSION_REASONS.GREEN_ACCUMULATION, dates_total: 1 })
+    }
+  } else if (card_type === 'red') {
+    const datesTotal = Math.max(1, Math.min(3, Number(suspension_dates) || 1))
+    await createSuspension(tournamentId, { player_name: pn, team_id, match_id: null, playoff_match_id: playoffMatchId, reason: SUSPENSION_REASONS.RED_DIRECT, dates_total: datesTotal })
+  }
+
   const [rows] = await pool.query('SELECT id, playoff_match_id, player_name, team_id, card_type FROM league_playoff_cards WHERE id = ?', [id])
   return rows[0]
 }

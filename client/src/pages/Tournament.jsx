@@ -5,8 +5,9 @@ import * as api from '../api/tournament'
 import TournamentConfig from '../components/tournament/TournamentConfig'
 import TournamentPlayers from '../components/tournament/TournamentPlayers'
 import RoundView from '../components/tournament/RoundView'
+import TournamentLogo from '../components/tournament/TournamentLogo'
 
-export default function Tournament({ isAdmin = false }) {
+export default function Tournament({ isAdmin = false, tournament = {} }) {
   const { id: tournamentId } = useParams()
   const navigate = useNavigate()
   const [state, setState] = useState(null)
@@ -220,17 +221,18 @@ export default function Tournament({ isAdmin = false }) {
       )}
 
 
-      <Container className="tournament-page-container py-4 py-lg-5">
+      <Container className="tournament-page-container py-3 py-md-4 py-lg-5">
+        <TournamentLogo sport={tournament.sport || 'padel'} gender={tournament.gender} />
         <div className="mb-4 d-flex align-items-center flex-wrap gap-2 tournament-page-title">
           {isAdmin && editingName ? (
-            <Form onSubmit={handleSaveName} className="d-flex align-items-center gap-2 flex-wrap">
+            <Form onSubmit={handleSaveName} className="d-flex align-items-center gap-2 flex-wrap w-100">
               <Form.Control
                 type="text"
                 value={editNameValue}
                 onChange={(e) => setEditNameValue(e.target.value)}
                 placeholder="Nombre del torneo"
-                className="form-control-lg"
-                style={{ maxWidth: '320px' }}
+                className="form-control-lg flex-grow-1"
+                style={{ maxWidth: '320px', minWidth: '0' }}
                 autoFocus
               />
               <Button type="submit" variant="primary" size="sm" disabled={savingName || !editNameValue.trim()}>
@@ -313,9 +315,9 @@ export default function Tournament({ isAdmin = false }) {
         ) : (
           <>
             {datesCount > 0 && (
-              <div className="mb-3 d-flex flex-wrap align-items-center gap-2">
+              <div className="mb-3 d-flex flex-wrap align-items-center gap-2 tournament-dates-buttons">
                 <span className="text-muted small me-1">Fechas:</span>
-                <div className="d-flex flex-wrap gap-1">
+                <div className="d-flex flex-wrap gap-1 overflow-x-auto">
                   {Array.from({ length: datesCount }, (_, i) => i + 1).map((num) => (
                     <button
                       key={num}

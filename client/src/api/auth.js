@@ -48,7 +48,10 @@ export async function getMe() {
   const res = await fetch(`${BASE}/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) return null
+  if (!res.ok) {
+    setStoredToken(null) // Token inválido o expirado: limpiar para evitar 401 repetidos
+    return null
+  }
   const data = await res.json()
   return data
 }

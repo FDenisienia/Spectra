@@ -33,12 +33,14 @@ export default function LeagueAdmin() {
   const [zoneForm, setZoneForm] = useState({ name: '', sort_order: 0 })
   const [scorers, setScorers] = useState([])
   const [discipline, setDiscipline] = useState([])
+  const [suspensions, setSuspensions] = useState([])
+  const [disciplineHistory, setDisciplineHistory] = useState([])
   const [showGoalsCardsModal, setShowGoalsCardsModal] = useState(false)
   const [editingMatchForGoals, setEditingMatchForGoals] = useState(null)
   const [matchGoals, setMatchGoals] = useState([])
   const [matchCards, setMatchCards] = useState([])
   const [goalForm, setGoalForm] = useState({ player_name: '', team_id: '', goals: '1' })
-  const [cardForm, setCardForm] = useState({ player_name: '', team_id: '', card_type: 'yellow' })
+  const [cardForm, setCardForm] = useState({ player_name: '', team_id: '', card_type: 'yellow', suspension_dates: 1 })
   const [showPlayersModal, setShowPlayersModal] = useState(false)
   const [editingTeamForPlayers, setEditingTeamForPlayers] = useState(null)
   const [teamPlayers, setTeamPlayers] = useState([])
@@ -72,8 +74,10 @@ export default function LeagueAdmin() {
       api.getScorers(tournamentId),
       api.getDiscipline(tournamentId),
       api.getPlayoffBracket(tournamentId).catch(() => []),
+      api.getSuspensions(tournamentId).catch(() => []),
+      api.getDisciplineHistory(tournamentId).catch(() => []),
     ])
-      .then(([t, te, mds, cfg, z, sc, disc, playoff]) => {
+      .then(([t, te, mds, cfg, z, sc, disc, playoff, susp, discHist]) => {
         setTournament(t)
         setTeams(te || [])
         setMatchdays(mds || [])
@@ -82,6 +86,8 @@ export default function LeagueAdmin() {
         setScorers(sc || [])
         setDiscipline(disc || [])
         setPlayoffBracket(Array.isArray(playoff) ? playoff : [])
+        setSuspensions(Array.isArray(susp) ? susp : [])
+        setDisciplineHistory(Array.isArray(discHist) ? discHist : [])
         setError(null)
         if (cfg?.phase === 'final_mini_ligas') {
           Promise.all([
@@ -256,10 +262,12 @@ export default function LeagueAdmin() {
     }
   }
 
+  const [suspendedPlayersSet, setSuspendedPlayersSet] = useState(new Set())
+
   const openGoalsCardsModal = (match) => {
     setEditingMatchForGoals(match)
     setGoalForm({ player_name: '', team_id: match?.home_team_id || '', goals: '1' })
-    setCardForm({ player_name: '', team_id: match?.home_team_id || '', card_type: 'yellow' })
+    setCardForm({ player_name: '', team_id: match?.home_team_id || '', card_type: 'yellow', suspension_dates: 1 })
     if (!match?.id) return
     const teamIds = match?.home_team_id && match?.away_team_id
       ? [match.home_team_id, match.away_team_id]
@@ -268,10 +276,12 @@ export default function LeagueAdmin() {
       api.getGoals(tournamentId, match.id),
       api.getCards(tournamentId, match.id),
       teamIds.length ? api.getPlayersByTeams(tournamentId, teamIds) : Promise.resolve({}),
-    ]).then(([goals, cards, byTeam]) => {
+      teamIds.length ? api.getSuspendedPlayers(tournamentId, teamIds) : Promise.resolve({ suspended: [] }),
+    ]).then(([goals, cards, byTeam, { suspended }]) => {
       setMatchGoals(goals || [])
       setMatchCards(cards || [])
       setPlayersByTeam(byTeam || {})
+      setSuspendedPlayersSet(new Set(suspended || []))
     }).catch(() => {})
     setShowGoalsCardsModal(true)
   }
@@ -317,10 +327,15 @@ export default function LeagueAdmin() {
         player_name: cardForm.player_name.trim(),
         team_id: cardForm.team_id,
         card_type: cardForm.card_type,
+        suspension_dates: cardForm.card_type === 'red' ? (cardForm.suspension_dates ?? 1) : undefined,
       })
-      const [cards] = await Promise.all([api.getCards(tournamentId, editingMatchForGoals.id)])
+      const [cards, { suspended }] = await Promise.all([
+        api.getCards(tournamentId, editingMatchForGoals.id),
+        api.getSuspendedPlayers(tournamentId, [editingMatchForGoals.home_team_id, editingMatchForGoals.away_team_id]),
+      ])
       setMatchCards(cards || [])
-      setCardForm({ player_name: '', team_id: cardForm.team_id, card_type: 'yellow' })
+      setSuspendedPlayersSet(new Set(suspended || []))
+      setCardForm({ player_name: '', team_id: cardForm.team_id, card_type: 'yellow', suspension_dates: 1 })
       loadAll()
     } catch (err) {
       setError(err.message)
@@ -572,6 +587,7 @@ export default function LeagueAdmin() {
   }
 
   const isPadel = tournament.sport === 'padel'
+  const isHockey = tournament.sport === 'hockey'
   const teamLabel = isPadel ? 'Pareja' : 'Equipo'
   const teamsLabel = isPadel ? 'Parejas' : 'Equipos'
   const zoneLabel = isPadel ? 'Grupo' : 'Zona'
@@ -585,14 +601,17 @@ export default function LeagueAdmin() {
       <Navbar bg="dark" variant="dark" expand="lg" className="shadow-sm">
         <Container>
           <Navbar.Brand as={Link} to="/admin">Spectra Admin</Navbar.Brand>
-          <Nav className="ms-auto">
-            <Nav.Link as={Link} to={`/torneo/${tournamentId}`}>Ver público</Nav.Link>
-            <Nav.Link as={Link} to="/admin">Panel</Nav.Link>
-          </Nav>
+          <Navbar.Toggle aria-controls="league-admin-nav" />
+          <Navbar.Collapse id="league-admin-nav">
+            <Nav className="ms-auto">
+              <Nav.Link as={Link} to={`/torneo/${tournamentId}`}>Ver público</Nav.Link>
+              <Nav.Link as={Link} to="/admin">Panel</Nav.Link>
+            </Nav>
+          </Navbar.Collapse>
         </Container>
       </Navbar>
 
-      <Container className="py-4">
+      <Container className="py-3 py-md-4 px-3 px-md-0">
         <div className="league-header">
           <h1>{tournament.name}</h1>
           <p className="subtitle mb-0">{adminLabel} · {teamsLabel}, {rosterLabel.toLowerCase()}, fixture y resultados</p>
@@ -1038,19 +1057,75 @@ export default function LeagueAdmin() {
                   ) : (
                     <Table responsive hover className="mb-0">
                       <thead className="table-light">
-                        <tr><th>Jugador</th><th>Equipo</th><th>🟨 Amarillas</th><th>🟥 Rojas</th></tr>
+                        <tr>
+                          <th>Jugador</th><th>Equipo</th>
+                          {isHockey && <th>🟩 Verdes</th>}
+                          <th>🟨 Amarillas</th><th>🟥 Rojas</th>
+                        </tr>
                       </thead>
                       <tbody>
                         {discipline.map((row, i) => (
                           <tr key={i}>
                             <td>{row.player_name}</td>
                             <td>{row.team_name}</td>
+                            {isHockey && <td>{row.green ?? 0}</td>}
                             <td>{row.yellow}</td>
                             <td>{row.red}</td>
                           </tr>
                         ))}
                       </tbody>
                     </Table>
+                  )}
+                </Card.Body>
+              </Card>
+              <Card className="mt-3">
+                <Card.Header className="fw-bold">Suspensiones</Card.Header>
+                <Card.Body className="p-0">
+                  {suspensions.length === 0 ? (
+                    <div className="league-empty py-3"><div className="league-empty-icon">🚫</div><p className="mb-0 small">
+                      Sin suspensiones. {isHockey ? 'En hockey: 3 verdes o 2 amarillas = 1 fecha automática. Roja directa: 1-3 fechas manuales.' : 'En fútbol: 3 amarillas = 1 fecha automática. Roja directa: 1-3 fechas manuales.'}
+                    </p></div>
+                  ) : (
+                    <Table responsive hover className="mb-0">
+                      <thead className="table-light">
+                        <tr><th>Jugador</th><th>Equipo</th><th>Motivo</th><th>Fechas</th><th>Estado</th></tr>
+                      </thead>
+                      <tbody>
+                        {suspensions.map((s) => (
+                          <tr key={s.id}>
+                            <td>{s.player_name}</td>
+                            <td>{s.team_name}</td>
+                            <td>{s.reason_label}</td>
+                            <td>{s.dates_served}/{s.dates_total}</td>
+                            <td>{s.is_active ? <span className="badge bg-warning text-dark">Suspendido</span> : <span className="badge bg-secondary">Cumplida</span>}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  )}
+                </Card.Body>
+              </Card>
+              <Card className="mt-3">
+                <Card.Header className="fw-bold">Historial disciplinario</Card.Header>
+                <Card.Body className="p-0">
+                  {disciplineHistory.length === 0 ? (
+                    <div className="league-empty py-3"><p className="mb-0 small">Sin historial de tarjetas o suspensiones.</p></div>
+                  ) : (
+                    <div className="p-2">
+                      {disciplineHistory.map((player, i) => (
+                        <div key={i} className="mb-3 p-2 border rounded">
+                          <strong>{player.player_name}</strong> — {player.team_name}
+                          <div className="mt-1 small">
+                            {player.cards?.length > 0 && (
+                              <span className="me-2">{player.cards.map((c) => (c.card_type === 'green' ? '🟩' : c.card_type === 'yellow' ? '🟨' : '🟥') + ' ' + c.card_label).join(', ')}</span>
+                            )}
+                            {player.suspensions?.length > 0 && (
+                              <span className="text-muted">Suspensiones: {player.suspensions.map((s) => `${s.reason_label} (${s.dates_served}/${s.dates_total})`).join('; ')}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </Card.Body>
               </Card>
@@ -1473,15 +1548,19 @@ export default function LeagueAdmin() {
                   <Form.Select
                     value={goalForm.player_name}
                     onChange={(e) => setGoalForm((f) => ({ ...f, player_name: e.target.value }))}
-                    style={{ width: 180 }}
+                    style={{ width: 200 }}
                     required
                   >
                     <option value="">Seleccionar jugador</option>
-                    {(playersByTeam[goalForm.team_id] || []).map((p) => (
-                      <option key={p.id} value={p.player_name}>
-                        {p.shirt_number ? `${p.shirt_number}. ` : ''}{p.player_name}
-                      </option>
-                    ))}
+                    {(playersByTeam[goalForm.team_id] || []).map((p) => {
+                      const key = `${p.player_name}::${goalForm.team_id}`
+                      const suspended = suspendedPlayersSet.has(key)
+                      return (
+                        <option key={p.id} value={p.player_name} disabled={suspended}>
+                          {p.shirt_number ? `${p.shirt_number}. ` : ''}{p.player_name}{suspended ? ' (Suspendido)' : ''}
+                        </option>
+                      )
+                    })}
                   </Form.Select>
                 ) : (
                   <Form.Control
@@ -1511,7 +1590,7 @@ export default function LeagueAdmin() {
                   <tr key={c.id}>
                     <td>{c.player_name}</td>
                     <td>{c.team_name}</td>
-                    <td>{c.card_type === 'yellow' ? '🟨 Amarilla' : '🟥 Roja'}</td>
+                    <td>{c.card_type === 'green' ? '🟩 Verde' : c.card_type === 'yellow' ? '🟨 Amarilla' : '🟥 Roja'}</td>
                     <td>
                       <Button variant="link" size="sm" className="p-0 text-danger" onClick={() => handleDeleteCard(c.id)}>Eliminar</Button>
                     </td>
@@ -1536,23 +1615,24 @@ export default function LeagueAdmin() {
                   <Form.Select
                     value={cardForm.player_name}
                     onChange={(e) => setCardForm((f) => ({ ...f, player_name: e.target.value }))}
-                    style={{ width: 180 }}
+                    style={{ width: 200 }}
                     required
                   >
                     <option value="">Seleccionar jugador</option>
-                    {(playersByTeam[cardForm.team_id] || []).map((p) => (
-                      <option key={p.id} value={p.player_name}>
-                        {p.shirt_number ? `${p.shirt_number}. ` : ''}{p.player_name}
-                      </option>
-                    ))}
+                    {(playersByTeam[cardForm.team_id] || []).map((p) => {
+                      const key = `${p.player_name}::${cardForm.team_id}`
+                      const suspended = suspendedPlayersSet.has(key)
+                      return (
+                        <option key={p.id} value={p.player_name} disabled={suspended}>
+                          {p.shirt_number ? `${p.shirt_number}. ` : ''}{p.player_name}{suspended ? ' (Suspendido)' : ''}
+                        </option>
+                      )
+                    })}
                   </Form.Select>
                 ) : (
-                  <Form.Control
-                    placeholder="Jugador (cargar plantel en Equipos)"
-                    value={cardForm.player_name}
-                    onChange={(e) => setCardForm((f) => ({ ...f, player_name: e.target.value }))}
-                    style={{ width: 200 }}
-                  />
+                  <span className="text-muted small" style={{ alignSelf: 'center' }}>
+                    Cargar plantel del equipo primero
+                  </span>
                 )
               )}
               <Form.Select
@@ -1560,9 +1640,22 @@ export default function LeagueAdmin() {
                 onChange={(e) => setCardForm((f) => ({ ...f, card_type: e.target.value }))}
                 style={{ width: 120 }}
               >
+                {isHockey && <option value="green">🟩 Verde</option>}
                 <option value="yellow">🟨 Amarilla</option>
                 <option value="red">🟥 Roja</option>
               </Form.Select>
+              {cardForm.card_type === 'red' && (
+                <Form.Select
+                  value={cardForm.suspension_dates ?? 1}
+                  onChange={(e) => setCardForm((f) => ({ ...f, suspension_dates: Number(e.target.value) }))}
+                  style={{ width: 90 }}
+                  title="Fechas de suspensión por roja directa"
+                >
+                  <option value={1}>1 fecha</option>
+                  <option value={2}>2 fechas</option>
+                  <option value={3}>3 fechas</option>
+                </Form.Select>
+              )}
               <Button type="submit" size="sm" disabled={saving || !cardForm.player_name?.trim() || !cardForm.team_id}>Agregar tarjeta</Button>
             </Form>
           </Modal.Body>

@@ -123,18 +123,18 @@ export default function MatchCard({ tournamentId, match, players, onUpdate, play
           const pair1 = setInfo.pair1 ?? match.pair1
           const pair2 = setInfo.pair2 ?? match.pair2
           return (
-            <Row key={setIndex} className="mb-2 align-items-center">
-              <Col md={5} className="small">
+            <Row key={setIndex} className="mb-2 align-items-center gy-1">
+              <Col xs={12} md={5} className="small">
                 <PairNames pairIds={pair1} players={players} />
               </Col>
-              <Col md={2} className="d-flex gap-1 justify-content-center">
+              <Col xs={12} md={2} className="d-flex gap-1 justify-content-center">
                 <Form.Control
                   type="number"
                   min={0}
                   placeholder="0"
                   size="sm"
                   className="text-center"
-                  style={{ maxWidth: '60px' }}
+                  style={{ maxWidth: '60px', minWidth: '50px' }}
                   value={localSets[setIndex]?.p1 ?? ''}
                   onChange={(e) => updateLocalSet(setIndex, 'p1', e.target.value)}
                 />
@@ -145,12 +145,12 @@ export default function MatchCard({ tournamentId, match, players, onUpdate, play
                   placeholder="0"
                   size="sm"
                   className="text-center"
-                  style={{ maxWidth: '60px' }}
+                  style={{ maxWidth: '60px', minWidth: '50px' }}
                   value={localSets[setIndex]?.p2 ?? ''}
                   onChange={(e) => updateLocalSet(setIndex, 'p2', e.target.value)}
                 />
               </Col>
-              <Col md={5} className="small text-end">
+              <Col xs={12} md={5} className="small text-end">
                 <PairNames pairIds={pair2} players={players} />
               </Col>
             </Row>

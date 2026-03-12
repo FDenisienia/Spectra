@@ -256,11 +256,11 @@ export async function getCards(tournamentId, matchId) {
   return res.json()
 }
 
-export async function addCard(tournamentId, matchId, { player_name, team_id, card_type }) {
+export async function addCard(tournamentId, matchId, { player_name, team_id, card_type, suspension_dates }) {
   const res = await fetch(`${base(tournamentId)}/matches/${matchId}/cards`, {
     method: 'POST',
     headers: jsonHeaders(),
-    body: JSON.stringify({ player_name, team_id, card_type }),
+    body: JSON.stringify({ player_name, team_id, card_type, suspension_dates }),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
@@ -290,6 +290,30 @@ export async function getScorers(tournamentId, { zoneId } = {}) {
 
 export async function getDiscipline(tournamentId, { zoneId } = {}) {
   const url = zoneId ? `${base(tournamentId)}/discipline?zone_id=${encodeURIComponent(zoneId)}` : `${base(tournamentId)}/discipline`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function getSuspensions(tournamentId, { activeOnly } = {}) {
+  const params = new URLSearchParams()
+  if (activeOnly) params.set('active', '1')
+  const url = `${base(tournamentId)}/suspensions${params.toString() ? '?' + params.toString() : ''}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function getDisciplineHistory(tournamentId, { zoneId } = {}) {
+  const url = zoneId ? `${base(tournamentId)}/discipline-history?zone_id=${encodeURIComponent(zoneId)}` : `${base(tournamentId)}/discipline-history`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function getSuspendedPlayers(tournamentId, teamIds) {
+  if (!teamIds?.length) return { suspended: [] }
+  const url = `${base(tournamentId)}/suspended-players?team_ids=${teamIds.map(encodeURIComponent).join(',')}`
   const res = await fetch(url)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()

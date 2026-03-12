@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Container, Card, Table, Spinner, Alert, Button, Nav } from 'react-bootstrap'
 import * as api from '../api/league'
+import TournamentLogo from '../components/tournament/TournamentLogo'
 import '../styles/League.css'
 import '../styles/TeamDetailSlider.css'
 
@@ -32,11 +33,13 @@ function roleLabel(role) {
 
 export default function TeamDetail({ tournamentId, tournament = {} }) {
   const isPadel = tournament.sport === 'padel'
+  const isHockey = tournament.sport === 'hockey'
   const SECTIONS = isPadel ? SECTIONS_PADEL : SECTIONS_ALL
   const { teamId } = useParams()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [suspensionByPlayer, setSuspensionByPlayer] = useState({})
   const [activeSection, setActiveSection] = useState(0)
   const [dateIndex, setDateIndex] = useState(0)
 
@@ -45,11 +48,25 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
     setLoading(true)
     setError(null)
     try {
-      const detail = await api.getTeamDetail(tournamentId, teamId)
+      const [detail, suspensions] = await Promise.all([
+        api.getTeamDetail(tournamentId, teamId),
+        api.getSuspensions(tournamentId, { activeOnly: true }).catch(() => []),
+      ])
       setData(detail)
+      // Mapa: player_name -> { dates_pending } para jugadores suspendidos de este equipo
+      const suspensionMap = {}
+      if (Array.isArray(suspensions)) {
+        suspensions.filter((s) => s.team_id === teamId).forEach((s) => {
+          const name = s.player_name
+          if (!suspensionMap[name]) suspensionMap[name] = 0
+          suspensionMap[name] += s.dates_pending ?? Math.max(0, (s.dates_total ?? 0) - (s.dates_served ?? 0))
+        })
+      }
+      setSuspensionByPlayer(suspensionMap)
     } catch (e) {
       setError(e.message)
       setData(null)
+      setSuspensionByPlayer({})
     } finally {
       setLoading(false)
     }
@@ -96,11 +113,13 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
     const awayG = (match.goals || []).filter((g) => g.team_id === awayId).reduce((s, g) => s + (Number(g.goals) || 0), 0)
     const homeYellow = (match.cards || []).filter((c) => c.team_id === homeId && c.card_type === 'yellow').length
     const homeRed = (match.cards || []).filter((c) => c.team_id === homeId && c.card_type === 'red').length
+    const homeGreen = (match.cards || []).filter((c) => c.team_id === homeId && c.card_type === 'green').length
     const awayYellow = (match.cards || []).filter((c) => c.team_id === awayId && c.card_type === 'yellow').length
     const awayRed = (match.cards || []).filter((c) => c.team_id === awayId && c.card_type === 'red').length
+    const awayGreen = (match.cards || []).filter((c) => c.team_id === awayId && c.card_type === 'green').length
     return {
-      home: { name: match.home_team_name, goals: homeG, yellow: homeYellow, red: homeRed },
-      away: { name: match.away_team_name, goals: awayG, yellow: awayYellow, red: awayRed },
+      home: { name: match.home_team_name, goals: homeG, yellow: homeYellow, red: homeRed, green: homeGreen },
+      away: { name: match.away_team_name, goals: awayG, yellow: awayYellow, red: awayRed, green: awayGreen },
     }
   }
 
@@ -108,16 +127,19 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
 
   return (
     <div className="league-page team-detail-slider">
-      <Container className="py-4">
+      <Container className="py-3 py-md-4 px-3 px-sm-4">
         <div className="d-flex align-items-center gap-2 mb-3">
           <Button as={Link} variant="outline-secondary" size="sm" to={`/torneo/${tournamentId}`}>
             ← Volver al torneo
           </Button>
         </div>
+        <TournamentLogo sport={tournament.sport} gender={tournament.gender} />
         <div className="league-header mb-4">
           <h1>{data?.team?.name ?? (isPadel ? 'Pareja' : 'Equipo')}</h1>
           <p className="subtitle mb-0 text-muted">
-            {tournament.name || 'Liga'} · {isPadel ? 'Integrantes y estadísticas de la pareja' : 'Jugadores y estadísticas del equipo'}
+            {tournament.name || 'Liga'}
+            {tournament.sport === 'futbol' && tournament.gender && ` · ${tournament.gender === 'masculino' ? 'Masculino' : tournament.gender === 'femenino' ? 'Femenino' : 'Mixto'}`}
+            {' · '}{isPadel ? 'Integrantes y estadísticas de la pareja' : 'Jugadores y estadísticas del equipo'}
           </p>
         </div>
 
@@ -162,29 +184,46 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
                           <>
                             <Table responsive hover className="mb-0 team-detail-table d-none d-sm-table">
                               <thead className="table-light">
-                                <tr><th>Nombre</th><th>Nº camiseta</th><th>Rol</th></tr>
+                                <tr><th>Nombre</th><th>Nº camiseta</th><th>Rol</th>{!isPadel && <th>Estado</th>}</tr>
                               </thead>
                               <tbody>
-                                {data.players.map((p) => (
-                                  <tr key={p.id}>
-                                    <td>{p.player_name}</td>
-                                    <td>{p.shirt_number ?? '—'}</td>
-                                    <td>{roleLabel(p.role)}</td>
-                                  </tr>
-                                ))}
+                                {data.players.map((p) => {
+                                  const pending = suspensionByPlayer[p.player_name]
+                                  const suspended = pending != null && pending > 0
+                                  return (
+                                    <tr key={p.id} className={suspended ? 'table-warning' : ''}>
+                                      <td>{p.player_name}</td>
+                                      <td>{p.shirt_number ?? '—'}</td>
+                                      <td>{roleLabel(p.role)}</td>
+                                      {!isPadel && (
+                                        <td>{suspended ? <span className="badge bg-warning text-dark">Suspendido ({pending} {pending === 1 ? 'fecha' : 'fechas'})</span> : <span className="badge bg-success">Activo</span>}</td>
+                                      )}
+                                    </tr>
+                                  )
+                                })}
                               </tbody>
                             </Table>
                             <div className="team-detail-list d-sm-none">
-                              {data.players.map((p) => (
-                                <div key={p.id} className="team-detail-list-item">
-                                  <span className="team-detail-list-label">Nombre</span>
-                                  <span className="team-detail-list-value">{p.player_name}</span>
-                                  <span className="team-detail-list-label">Nº camiseta</span>
-                                  <span className="team-detail-list-value">{p.shirt_number ?? '—'}</span>
-                                  <span className="team-detail-list-label">Rol</span>
-                                  <span className="team-detail-list-value">{roleLabel(p.role)}</span>
-                                </div>
-                              ))}
+                              {data.players.map((p) => {
+                                const pending = suspensionByPlayer[p.player_name]
+                                const suspended = pending != null && pending > 0
+                                return (
+                                  <div key={p.id} className={`team-detail-list-item ${suspended ? 'team-detail-list-item--suspended' : ''}`}>
+                                    <span className="team-detail-list-label">Nombre</span>
+                                    <span className="team-detail-list-value">{p.player_name}</span>
+                                    <span className="team-detail-list-label">Nº camiseta</span>
+                                    <span className="team-detail-list-value">{p.shirt_number ?? '—'}</span>
+                                    <span className="team-detail-list-label">Rol</span>
+                                    <span className="team-detail-list-value">{roleLabel(p.role)}</span>
+                                    {!isPadel && (
+                                      <>
+                                        <span className="team-detail-list-label">Estado</span>
+                                        <span className="team-detail-list-value">{suspended ? `Suspendido (${pending} ${pending === 1 ? 'fecha' : 'fechas'})` : 'Activo'}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                )
+                              })}
                             </div>
                           </>
                         )}
@@ -245,12 +284,17 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
                           <>
                             <Table responsive hover className="mb-0 team-detail-table d-none d-sm-table">
                               <thead className="table-light">
-                                <tr><th>Jugador</th><th>Amarillas</th><th>Rojas</th></tr>
+                                <tr>
+                                  <th>Jugador</th>
+                                  {isHockey && <th>Verdes</th>}
+                                  <th>Amarillas</th><th>Rojas</th>
+                                </tr>
                               </thead>
                               <tbody>
                                 {data.discipline.map((row, i) => (
                                   <tr key={i}>
                                     <td>{row.player_name}</td>
+                                    {isHockey && <td>{row.green ?? 0}</td>}
                                     <td>{row.yellow}</td>
                                     <td>{row.red}</td>
                                   </tr>
@@ -262,6 +306,7 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
                                 <div key={i} className="team-detail-list-item">
                                   <span className="team-detail-list-label">Jugador</span>
                                   <span className="team-detail-list-value">{row.player_name}</span>
+                                  {isHockey && <><span className="team-detail-list-label">Verdes</span><span className="team-detail-list-value">{row.green ?? 0}</span></>}
                                   <span className="team-detail-list-label">Amarillas</span>
                                   <span className="team-detail-list-value">{row.yellow}</span>
                                   <span className="team-detail-list-label">Rojas</span>
@@ -315,7 +360,7 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
                                                 <p className="mb-1"><strong>Goles por equipo:</strong></p>
                                                 <p className="mb-1 text-muted mb-2">{detail.home.name}: {detail.home.goals} — {detail.away.name}: {detail.away.goals}</p>
                                                 <p className="mb-1"><strong>Tarjetas por equipo:</strong></p>
-                                                <p className="mb-0 text-muted">{detail.home.name}: 🟨 {detail.home.yellow} 🟥 {detail.home.red} — {detail.away.name}: 🟨 {detail.away.yellow} 🟥 {detail.away.red}</p>
+                                                <p className="mb-0 text-muted">{detail.home.name}: {isHockey && `🟩 ${detail.home.green ?? 0} `}🟨 {detail.home.yellow} 🟥 {detail.home.red} — {detail.away.name}: {isHockey && `🟩 ${detail.away.green ?? 0} `}🟨 {detail.away.yellow} 🟥 {detail.away.red}</p>
                                               </div>
                                             )}
                                           </>

@@ -4,6 +4,7 @@ import { Spinner, Alert } from 'react-bootstrap'
 import * as api from '../api/tournament'
 import Tournament from '../pages/Tournament'
 import LeagueView from '../pages/LeagueView'
+import TournamentBackground from './tournament/TournamentBackground'
 
 /**
  * Carga el torneo y muestra la vista según deporte: pádel (Tournament) o liga (LeagueView).
@@ -54,21 +55,30 @@ export default function TournamentRouter({ isAdmin = false }) {
     )
   }
 
-  const themeClass = `tournament-view theme-${tournament.sport}`
+  const themeSuffix = tournament.sport === 'futbol' && tournament.gender === 'mixto' ? 'futbol-mixto'
+    : tournament.sport === 'futbol' && tournament.gender === 'masculino' ? 'futbol-masculino'
+    : tournament.sport
+  const themeClass = `tournament-view theme-${themeSuffix}`
 
   const useLeagueFormat = tournament.sport === 'futbol' || tournament.sport === 'hockey' ||
     (tournament.sport === 'padel' && (tournament.modality === 'grupo' || tournament.modality === 'liga'))
   if (useLeagueFormat) {
     return (
       <div className={themeClass}>
-        <LeagueView tournamentId={id} tournament={tournament} teamId={teamId} />
+        {!isAdmin && <TournamentBackground sport={tournament.sport || 'padel'} gender={tournament.gender} />}
+        <div className="tournament-content">
+          <LeagueView tournamentId={id} tournament={tournament} teamId={teamId} />
+        </div>
       </div>
     )
   }
 
   return (
     <div className={themeClass}>
-      <Tournament isAdmin={isAdmin} />
+      {!isAdmin && <TournamentBackground sport={tournament.sport || 'padel'} gender={tournament.gender} />}
+      <div className="tournament-content">
+        <Tournament isAdmin={isAdmin} tournament={tournament} />
+      </div>
     </div>
   )
 }

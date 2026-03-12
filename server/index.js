@@ -22,6 +22,7 @@ import { ensureSchema, pool } from './db/index.js'
 import { seedAdmin } from './db/seedAdmin.js'
 import * as tournamentsRepo from './db/repo/tournaments.js'
 import * as leagueRepo from './db/repo/league.js'
+import * as homeRepo from './db/repo/home.js'
 import { login, requireAuth, changePassword } from './auth.js'
 
 const app = express()
@@ -143,12 +144,13 @@ app.get('/api/tournaments', async (req, res) => {
 
 app.post('/api/tournaments', requireAuth, async (req, res) => {
   try {
-    const { name, sport, modality, status, start_date, end_date, rules } = req.body || {}
+    const { name, sport, modality, gender, status, start_date, end_date, rules } = req.body || {}
     const state = sport === 'padel' && (modality === 'escalera' || !modality) ? defaultState() : null
     const row = await tournamentsRepo.create({
       name: name && String(name).trim() ? String(name).trim() : undefined,
       sport: sport || 'padel',
       modality: modality || (sport === 'padel' ? 'escalera' : 'liga'),
+      gender: sport === 'futbol' ? (gender || null) : null,
       status: status || 'active',
       start_date: start_date || null,
       end_date: end_date || null,
@@ -160,6 +162,7 @@ app.post('/api/tournaments', requireAuth, async (req, res) => {
       name: row.name,
       sport: row.sport,
       modality: row.modality,
+      gender: row.gender,
       status: row.status,
       start_date: row.start_date,
       end_date: row.end_date,
@@ -182,6 +185,7 @@ app.get('/api/tournament/:id', async (req, res) => {
       name: t.name,
       sport: t.sport,
       modality: t.modality,
+      gender: t.gender,
       status: t.status,
       start_date: t.start_date,
       end_date: t.end_date,
@@ -198,11 +202,12 @@ app.patch('/api/tournament/:id', requireAuth, async (req, res) => {
   try {
     const t = await tournamentsRepo.getById(req.params.id)
     if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
-    const { name, sport, modality, status, start_date, end_date, rules } = req.body || {}
+    const { name, sport, modality, gender, status, start_date, end_date, rules } = req.body || {}
     const updates = {}
     if (name != null && String(name).trim()) updates.name = String(name).trim()
     if (sport != null) updates.sport = sport
     if (modality != null) updates.modality = modality
+    if (gender !== undefined) updates.gender = t.sport === 'futbol' ? (gender || null) : null
     if (status != null) updates.status = status
     if (start_date !== undefined) updates.start_date = start_date
     if (end_date !== undefined) updates.end_date = end_date
@@ -778,7 +783,8 @@ app.get('/api/tournament/:id/league/matches/:matchId/cards', async (req, res) =>
 
 app.post('/api/tournament/:id/league/matches/:matchId/cards', requireAuth, async (req, res) => {
   try {
-    const card = await leagueRepo.addCard(req.params.matchId, req.body || {})
+    const { player_name, team_id, card_type, suspension_dates } = req.body || {}
+    const card = await leagueRepo.addCard(req.params.matchId, { player_name, team_id, card_type, suspension_dates })
     res.status(201).json(card)
   } catch (e) {
     res.status(400).json({ error: e.message })
@@ -836,6 +842,173 @@ app.get('/api/tournament/:id/league/discipline', async (req, res) => {
     const global = req.query.global === '1' || req.query.global === 'true'
     const discipline = global ? await leagueRepo.getDisciplineGlobal(req.params.id, { zoneId }) : await leagueRepo.getDiscipline(req.params.id, { zoneId })
     res.json(discipline)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/tournament/:id/league/suspensions', async (req, res) => {
+  try {
+    const t = await tournamentsRepo.getById(req.params.id)
+    if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
+    if (!isLeagueTournament(t)) return res.status(400).json({ error: 'Torneo no es de liga' })
+    const activeOnly = req.query.active === '1' || req.query.active === 'true'
+    const list = await leagueRepo.getSuspensions(req.params.id, { activeOnly })
+    res.json(list)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/tournament/:id/league/discipline-history', async (req, res) => {
+  try {
+    const t = await tournamentsRepo.getById(req.params.id)
+    if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
+    if (!isLeagueTournament(t)) return res.status(400).json({ error: 'Torneo no es de liga' })
+    const zoneId = req.query.zone_id || null
+    const list = await leagueRepo.getDisciplineHistory(req.params.id, { zoneId })
+    res.json(list)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// --- Home: hero, galería, sponsors (público y admin) ---
+app.get('/api/home', async (req, res) => {
+  try {
+    const [hero, gallery, sponsors] = await Promise.all([
+      homeRepo.getHeroContent(),
+      homeRepo.getGalleryImages(),
+      homeRepo.getSponsors(),
+    ])
+    res.json({ ...hero, gallery, sponsors })
+  } catch (e) {
+    console.error('GET /api/home error:', e)
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.patch('/api/home/hero', requireAuth, async (req, res) => {
+  try {
+    const { heroTitle, heroDescription } = req.body || {}
+    const content = await homeRepo.updateHeroContent({
+      heroTitle: heroTitle != null ? heroTitle : undefined,
+      heroDescription: heroDescription != null ? heroDescription : undefined,
+    })
+    res.json(content)
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.get('/api/home/gallery', async (req, res) => {
+  try {
+    const gallery = await homeRepo.getGalleryImages()
+    res.json(gallery)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/home/gallery', requireAuth, async (req, res) => {
+  try {
+    const { url, alt, sortOrder } = req.body || {}
+    const item = await homeRepo.createGalleryImage({ url, alt, sortOrder })
+    res.status(201).json(item)
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.patch('/api/home/gallery/:id', requireAuth, async (req, res) => {
+  try {
+    const { url, alt, sortOrder } = req.body || {}
+    const item = await homeRepo.updateGalleryImage(req.params.id, { url, alt, sortOrder })
+    if (!item) return res.status(404).json({ error: 'Imagen no encontrada' })
+    res.json(item)
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.delete('/api/home/gallery/:id', requireAuth, async (req, res) => {
+  try {
+    const ok = await homeRepo.deleteGalleryImage(req.params.id)
+    if (!ok) return res.status(404).json({ error: 'Imagen no encontrada' })
+    res.status(204).send()
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/home/gallery/reorder', requireAuth, async (req, res) => {
+  try {
+    const { ids } = req.body || {}
+    const gallery = await homeRepo.reorderGallery(Array.isArray(ids) ? ids : [])
+    res.json(gallery)
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.get('/api/home/sponsors', async (req, res) => {
+  try {
+    const sponsors = await homeRepo.getSponsors()
+    res.json(sponsors)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/home/sponsors', requireAuth, async (req, res) => {
+  try {
+    const { name, logoUrl, link, sortOrder } = req.body || {}
+    const item = await homeRepo.createSponsor({ name, logoUrl, link, sortOrder })
+    res.status(201).json(item)
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.patch('/api/home/sponsors/:id', requireAuth, async (req, res) => {
+  try {
+    const { name, logoUrl, link, sortOrder } = req.body || {}
+    const item = await homeRepo.updateSponsor(req.params.id, { name, logoUrl, link, sortOrder })
+    if (!item) return res.status(404).json({ error: 'Sponsor no encontrado' })
+    res.json(item)
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.delete('/api/home/sponsors/:id', requireAuth, async (req, res) => {
+  try {
+    const ok = await homeRepo.deleteSponsor(req.params.id)
+    if (!ok) return res.status(404).json({ error: 'Sponsor no encontrado' })
+    res.status(204).send()
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/home/sponsors/reorder', requireAuth, async (req, res) => {
+  try {
+    const { ids } = req.body || {}
+    const sponsors = await homeRepo.reorderSponsors(Array.isArray(ids) ? ids : [])
+    res.json(sponsors)
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.get('/api/tournament/:id/league/suspended-players', async (req, res) => {
+  try {
+    const t = await tournamentsRepo.getById(req.params.id)
+    if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
+    if (!isLeagueTournament(t)) return res.status(400).json({ error: 'Torneo no es de liga' })
+    const teamIds = (req.query.team_ids || '').split(',').filter(Boolean)
+    const suspendedSet = await leagueRepo.getSuspendedPlayersSet(req.params.id, teamIds)
+    res.json({ suspended: Array.from(suspendedSet) })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -929,7 +1102,8 @@ app.get('/api/tournament/:id/league/playoff/matches/:matchId/cards', async (req,
 
 app.post('/api/tournament/:id/league/playoff/matches/:matchId/cards', requireAuth, async (req, res) => {
   try {
-    const card = await leagueRepo.addPlayoffCard(req.params.matchId, req.body || {})
+    const { player_name, team_id, card_type, suspension_dates } = req.body || {}
+    const card = await leagueRepo.addPlayoffCard(req.params.matchId, { player_name, team_id, card_type, suspension_dates })
     res.status(201).json(card)
   } catch (e) {
     res.status(400).json({ error: e.message })

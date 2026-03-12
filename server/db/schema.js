@@ -94,7 +94,7 @@ export const statements = [
     card_type VARCHAR(10) NOT NULL,
     CONSTRAINT fk_league_cards_match FOREIGN KEY (match_id) REFERENCES league_matches(id) ON DELETE CASCADE,
     CONSTRAINT fk_league_cards_team FOREIGN KEY (team_id) REFERENCES league_teams(id),
-    CONSTRAINT chk_league_cards_type CHECK (card_type IN ('yellow','red'))
+    CONSTRAINT chk_league_cards_type CHECK (card_type IN ('yellow','red','green'))
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
   `CREATE TABLE IF NOT EXISTS league_team_players (
@@ -164,7 +164,48 @@ export const statements = [
     card_type VARCHAR(10) NOT NULL,
     CONSTRAINT fk_playoff_cards_match FOREIGN KEY (playoff_match_id) REFERENCES league_playoff_matches(id) ON DELETE CASCADE,
     CONSTRAINT fk_playoff_cards_team FOREIGN KEY (team_id) REFERENCES league_teams(id),
-    CONSTRAINT chk_playoff_cards_type CHECK (card_type IN ('yellow','red'))
+    CONSTRAINT chk_playoff_cards_type CHECK (card_type IN ('yellow','red','green'))
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS home_content (
+    \`key\` VARCHAR(50) PRIMARY KEY,
+    value TEXT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS home_gallery (
+    id VARCHAR(50) PRIMARY KEY,
+    url VARCHAR(1000) NOT NULL,
+    alt VARCHAR(255) NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS home_sponsors (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    logo_url VARCHAR(1000) NULL,
+    link VARCHAR(1000) NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS league_suspensions (
+    id VARCHAR(50) PRIMARY KEY,
+    tournament_id VARCHAR(50) NOT NULL,
+    player_name VARCHAR(255) NOT NULL,
+    team_id VARCHAR(50) NOT NULL,
+    match_id VARCHAR(50) NULL,
+    playoff_match_id VARCHAR(50) NULL,
+    reason VARCHAR(30) NOT NULL,
+    dates_total INT NOT NULL DEFAULT 1,
+    dates_served INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_suspensions_tournament FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_suspensions_team FOREIGN KEY (team_id) REFERENCES league_teams(id) ON DELETE CASCADE,
+    CONSTRAINT fk_suspensions_match FOREIGN KEY (match_id) REFERENCES league_matches(id) ON DELETE SET NULL,
+    CONSTRAINT fk_suspensions_playoff_match FOREIGN KEY (playoff_match_id) REFERENCES league_playoff_matches(id) ON DELETE SET NULL,
+    CONSTRAINT chk_suspensions_reason CHECK (reason IN ('yellow_accumulation','green_accumulation','red_direct'))
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ]
 
@@ -185,6 +226,8 @@ export const indexStatements = [
   'CREATE INDEX idx_league_playoff_matches_round ON league_playoff_matches(round_id)',
   'CREATE INDEX idx_league_playoff_goals_match ON league_playoff_goals(playoff_match_id)',
   'CREATE INDEX idx_league_playoff_cards_match ON league_playoff_cards(playoff_match_id)',
+  'CREATE INDEX idx_league_suspensions_tournament ON league_suspensions(tournament_id)',
+  'CREATE INDEX idx_league_suspensions_player ON league_suspensions(tournament_id, player_name, team_id)',
 ]
 
 /**
@@ -207,10 +250,20 @@ const migrationStatements = [
   "ALTER TABLE league_team_players ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'player' AFTER shirt_number",
   'ALTER TABLE league_goals ADD COLUMN goals INT NOT NULL DEFAULT 1 AFTER minute',
   'ALTER TABLE league_playoff_goals ADD COLUMN goals INT NOT NULL DEFAULT 1 AFTER minute',
+  'ALTER TABLE league_suspensions ADD COLUMN playoff_match_id VARCHAR(50) NULL AFTER match_id',
+  // Reglas disciplinarias hockey: agregar tarjeta verde y green_accumulation
+  "ALTER TABLE league_cards DROP CHECK chk_league_cards_type",
+  "ALTER TABLE league_cards ADD CONSTRAINT chk_league_cards_type CHECK (card_type IN ('yellow','red','green'))",
+  "ALTER TABLE league_playoff_cards DROP CHECK chk_playoff_cards_type",
+  "ALTER TABLE league_playoff_cards ADD CONSTRAINT chk_playoff_cards_type CHECK (card_type IN ('yellow','red','green'))",
+  "ALTER TABLE league_suspensions DROP CHECK chk_suspensions_reason",
+  "ALTER TABLE league_suspensions ADD CONSTRAINT chk_suspensions_reason CHECK (reason IN ('yellow_accumulation','green_accumulation','red_direct'))",
+  "ALTER TABLE tournaments ADD COLUMN gender VARCHAR(20) NULL AFTER modality",
 ]
 const migrationFkStatements = [
   'ALTER TABLE league_teams ADD CONSTRAINT fk_league_teams_zone FOREIGN KEY (zone_id) REFERENCES league_zones(id) ON DELETE SET NULL',
   'ALTER TABLE league_matches ADD CONSTRAINT fk_league_matches_zone FOREIGN KEY (zone_id) REFERENCES league_zones(id) ON DELETE SET NULL',
+  'ALTER TABLE league_suspensions ADD CONSTRAINT fk_suspensions_playoff_match FOREIGN KEY (playoff_match_id) REFERENCES league_playoff_matches(id) ON DELETE SET NULL',
 ]
 
 export async function createSchema(pool) {
@@ -223,7 +276,8 @@ export async function createSchema(pool) {
       try {
         await conn.query(sql)
       } catch (err) {
-        if (err.code !== 'ER_DUP_FIELDNAME') throw err
+        // ER_DUP_FIELDNAME: columna ya existe. ER_CHECK_CONSTRAINT_NOT_FOUND (3941): MySQL < 8.0.16 sin CHECK.
+        if (err.code !== 'ER_DUP_FIELDNAME' && err.code !== 'ER_CHECK_CONSTRAINT_NOT_FOUND' && err.errno !== 3941) throw err
       }
     }
     for (const sql of migrationFkStatements) {

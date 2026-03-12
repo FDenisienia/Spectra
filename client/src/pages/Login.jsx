@@ -28,13 +28,13 @@ export default function Login() {
   }
 
   return (
-    <Container className="py-5">
+    <Container className="py-4 py-md-5 px-3">
       <div className="d-flex justify-content-center">
-        <Card className="shadow-sm" style={{ maxWidth: '400px', width: '100%' }}>
+        <Card className="shadow-sm w-100" style={{ maxWidth: '400px' }}>
           <Card.Header className="bg-dark text-white">
             <Card.Title className="mb-0">Administración Spectra</Card.Title>
           </Card.Header>
-          <Card.Body className="p-4">
+          <Card.Body className="p-3 p-md-4">
             {error && (
               <Alert variant="danger" dismissible onClose={() => setError(null)}>
                 {error}

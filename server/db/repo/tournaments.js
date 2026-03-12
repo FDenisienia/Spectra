@@ -12,6 +12,7 @@ function rowToTournament(row) {
     name: row.name,
     sport: row.sport,
     modality: row.modality,
+    gender: row.gender || null,
     status: row.status,
     start_date: row.start_date,
     end_date: row.end_date,
@@ -38,7 +39,7 @@ export async function getAllPadelWithState() {
 }
 
 export async function getAll(filters = {}) {
-  let sql = 'SELECT id, name, sport, modality, status, start_date, end_date, rules, created_at, updated_at, state_json FROM tournaments WHERE 1=1'
+  let sql = 'SELECT id, name, sport, modality, gender, status, start_date, end_date, rules, created_at, updated_at, state_json FROM tournaments WHERE 1=1'
   const params = []
   if (filters.status) {
     sql += ' AND status = ?'
@@ -55,6 +56,7 @@ export async function getAll(filters = {}) {
     name: r.name,
     sport: r.sport,
     modality: r.modality,
+    gender: r.gender || null,
     status: r.status,
     start_date: r.start_date,
     end_date: r.end_date,
@@ -68,7 +70,7 @@ export async function getAll(filters = {}) {
 
 export async function getById(id) {
   const [rows] = await pool.query(
-    'SELECT id, name, sport, modality, status, start_date, end_date, rules, created_at, updated_at, state_json FROM tournaments WHERE id = ?',
+    'SELECT id, name, sport, modality, gender, status, start_date, end_date, rules, created_at, updated_at, state_json FROM tournaments WHERE id = ?',
     [id]
   )
   return rows.length ? rowToTournament(rows[0]) : null
@@ -79,6 +81,7 @@ export async function create(data) {
   const name = (data.name && String(data.name).trim()) || `Torneo ${id}`
   const sport = data.sport || 'padel'
   const modality = data.modality || (sport === 'padel' ? 'escalera' : 'liga')
+  const gender = data.gender && sport === 'futbol' ? data.gender : null
   const status = data.status || 'active'
   const start_date = data.start_date || null
   const end_date = data.end_date || null
@@ -86,9 +89,9 @@ export async function create(data) {
   const state_json = data.state_json != null ? data.state_json : null
   const created_at = new Date().toISOString().slice(0, 19).replace('T', ' ')
   await pool.query(
-    `INSERT INTO tournaments (id, name, sport, modality, status, start_date, end_date, rules, created_at, state_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, name, sport, modality, status, start_date, end_date, rules, created_at, state_json]
+    `INSERT INTO tournaments (id, name, sport, modality, gender, status, start_date, end_date, rules, created_at, state_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, name, sport, modality, gender, status, start_date, end_date, rules, created_at, state_json]
   )
   return getById(id)
 }
@@ -107,6 +110,10 @@ export async function update(id, data) {
   if (data.modality !== undefined) {
     updates.push('modality = ?')
     params.push(data.modality)
+  }
+  if (data.gender !== undefined) {
+    updates.push('gender = ?')
+    params.push(data.gender || null)
   }
   if (data.status !== undefined) {
     updates.push('status = ?')

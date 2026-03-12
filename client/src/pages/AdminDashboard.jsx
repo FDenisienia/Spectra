@@ -6,6 +6,7 @@ import { logout, changePassword } from '../api/auth'
 
 const SPORT_LABEL = { padel: 'Pádel', futbol: 'Fútbol', hockey: 'Hockey' }
 const MODALITY_LABEL = { escalera: 'Escalera', grupo: 'Fase de Grupos', liga: 'Liga' }
+const GENDER_LABEL = { masculino: 'Masculino', femenino: 'Femenino', mixto: 'Mixto' }
 // Deporte en orden alfabético: Fútbol, Hockey, Pádel
 const SPORT_OPTIONS = [
   { value: 'futbol', label: 'Fútbol' },
@@ -24,6 +25,11 @@ const FORMATO_PADEL = [
   { value: 'liga', label: 'Liga (parejas)', desc: 'Tabla única, fixture todos contra todos' },
 ]
 const STATUS_OPTIONS = [{ value: 'active', label: 'Activo' }, { value: 'finished', label: 'Finalizado' }]
+const GENDER_OPTIONS = [
+  { value: 'masculino', label: 'Masculino' },
+  { value: 'femenino', label: 'Femenino' },
+  { value: 'mixto', label: 'Mixto' },
+]
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -39,6 +45,7 @@ export default function AdminDashboard() {
     name: '',
     sport: 'futbol',
     modality: 'grupo',
+    gender: '',
     status: 'active',
     start_date: '',
     end_date: '',
@@ -65,6 +72,7 @@ export default function AdminDashboard() {
       name: '',
       sport: 'futbol',
       modality: 'grupo',
+      gender: '',
       status: 'active',
       start_date: '',
       end_date: '',
@@ -75,7 +83,7 @@ export default function AdminDashboard() {
 
   const handleSportChange = (newSport) => {
     const options = newSport === 'padel' ? FORMATO_PADEL : MODALITY_FUTBOL_HOCKEY
-    setForm((f) => ({ ...f, sport: newSport, modality: options[0].value }))
+    setForm((f) => ({ ...f, sport: newSport, modality: options[0].value, gender: newSport !== 'futbol' ? '' : f.gender }))
   }
 
   const handleCreate = async (e) => {
@@ -87,6 +95,7 @@ export default function AdminDashboard() {
         name: form.name.trim() || undefined,
         sport: form.sport,
         modality: form.modality,
+        gender: form.sport === 'futbol' ? (form.gender || null) : null,
         status: form.status,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
@@ -157,6 +166,7 @@ export default function AdminDashboard() {
           <Navbar.Toggle aria-controls="admin-nav" />
           <Navbar.Collapse id="admin-nav">
             <Nav className="ms-auto">
+              <Nav.Link as={Link} to="/admin/home">Contenido Home</Nav.Link>
               <Nav.Link as={Link} to="/">Ver web pública</Nav.Link>
               <Button variant="outline-light" size="sm" onClick={() => { setPasswordForm({ current: '', new: '', confirm: '' }); setShowPasswordModal(true); }}>
                 Cambiar contraseña
@@ -169,12 +179,22 @@ export default function AdminDashboard() {
         </Container>
       </Navbar>
 
-      <Container className="py-4">
+      <Container className="py-3 py-md-4 px-3 px-md-0">
         {error && (
           <Alert variant="danger" dismissible onClose={() => setError(null)} className="mb-3">
             {error}
           </Alert>
         )}
+
+        <Card as={Link} to="/admin/home" className="mb-4 shadow-sm text-decoration-none" style={{ color: 'inherit' }}>
+          <Card.Body className="d-flex align-items-center justify-content-between py-3">
+            <div>
+              <h2 className="h6 mb-1 fw-bold">Contenido de la Home</h2>
+              <p className="mb-0 small text-muted">Hero, galería de fotos y sponsors</p>
+            </div>
+            <span className="text-primary">→</span>
+          </Card.Body>
+        </Card>
 
         <Card className="shadow-sm">
           <Card.Header className="d-flex justify-content-between align-items-center">
@@ -207,6 +227,7 @@ export default function AdminDashboard() {
                       <span className="fw-semibold">{t.name}</span>
                       <span className="text-muted small ms-2">
                         {SPORT_LABEL[t.sport] || t.sport}
+                        {t.sport === 'futbol' && t.gender && ` · ${GENDER_LABEL[t.gender] || t.gender}`}
                         {t.sport === 'padel' && t.modality && ` · ${MODALITY_LABEL[t.modality] || t.modality}`}
                         {` · ${t.status}`}
                         {t.sport === 'padel' && t.modality === 'escalera' && t.config && ` · Fecha ${t.currentDate || '-'}`}
@@ -269,6 +290,20 @@ export default function AdminDashboard() {
                   <Form.Text className="text-muted d-block mt-1">{selectedFormatoDesc}</Form.Text>
                 )}
               </Form.Group>
+              {form.sport === 'futbol' && (
+                <Form.Group className="mb-3">
+                  <Form.Label>Categoría</Form.Label>
+                  <Form.Select
+                    value={form.gender}
+                    onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {GENDER_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              )}
               <Form.Group className="mb-3">
                 <Form.Label>Estado</Form.Label>
                 <Form.Select
