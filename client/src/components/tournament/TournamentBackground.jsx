@@ -11,6 +11,7 @@ export default function TournamentBackground({ sport = 'padel', gender }) {
           fetchPriority="high"
           loading="eager"
           decoding="async"
+          style={theme.objectPosition ? { objectPosition: theme.objectPosition } : undefined}
         />
       </div>
       <div

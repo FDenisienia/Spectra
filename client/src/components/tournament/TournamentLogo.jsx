@@ -14,8 +14,11 @@ export default function TournamentLogo({ sport, gender, darkBg = false }) {
   const logo = logoKey ? SPORT_LOGOS[logoKey] : null
   if (!logo) return null
   const useWhiteFilter = logo.whiteFilter && darkBg
+  const isFutbol = sport === 'futbol'
+  const isHockey = sport === 'hockey'
+  const isPadel = sport === 'padel'
   return (
-    <div className={`tournament-logo ${useWhiteFilter ? 'tournament-logo--white' : ''}`}>
+    <div className={`tournament-logo ${useWhiteFilter ? 'tournament-logo--white' : ''} ${isFutbol ? 'tournament-logo--futbol-bg' : ''} ${isHockey ? 'tournament-logo--hockey-bg' : ''} ${isPadel ? 'tournament-logo--padel-bg' : ''}`}>
       <img src={logo.src} alt={logo.alt} />
     </div>
   )

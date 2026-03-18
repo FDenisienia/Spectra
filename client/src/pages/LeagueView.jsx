@@ -4,9 +4,11 @@ import { Container, Card, Spinner, Alert, ListGroup, Table, Button, Row, Col } f
 import * as api from '../api/league'
 import TeamDetail from './TeamDetail'
 import TournamentLogo from '../components/tournament/TournamentLogo'
+import { isLeagueFormat } from '../utils/tournamentFormat'
 import '../styles/League.css'
 
 export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
+  const isLeague = isLeagueFormat(tournament)
   const [teams, setTeams] = useState([])
   const [zones, setZones] = useState([])
   const [standingsByZone, setStandingsByZone] = useState({})
@@ -19,6 +21,10 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
 
   useEffect(() => {
     if (!tournamentId) return
+    if (!isLeague) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     api.getZones(tournamentId)
@@ -30,11 +36,11 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [tournamentId])
+  }, [tournamentId, isLeague])
 
   // Sin zonas: datos globales. Con zonas: tabla y goleadores por cada zona (todo por zona)
   useEffect(() => {
-    if (!tournamentId) return
+    if (!tournamentId || !isLeague) return
     api.getTeams(tournamentId)
       .then((t) => setTeams(t || []))
       .catch((e) => setError(e.message))
@@ -68,10 +74,10 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
         })
         .catch((e) => setError(e.message))
     }
-  }, [tournamentId, zones])
+  }, [tournamentId, zones, isLeague])
 
   useEffect(() => {
-    if (!tournamentId) return
+    if (!tournamentId || !isLeague) return
     api.getPlayoffBracket(tournamentId)
       .then((bracket) => {
         const b = Array.isArray(bracket) ? bracket : []
@@ -86,7 +92,18 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
         }
       })
       .catch(() => setPlayoffBracket([]))
-  }, [tournamentId])
+  }, [tournamentId, isLeague])
+
+  // Si no es torneo de liga, no llamar APIs (evita 400 por inconsistencia de datos)
+  if (tournamentId && tournament.sport && !isLeague) {
+    return (
+      <Container className="py-5">
+        <Alert variant="warning">
+          Este torneo no usa formato de liga. <Link to="/">Volver al inicio</Link>
+        </Alert>
+      </Container>
+    )
+  }
 
   // Si hay teamId, mostrar detalle del equipo
   if (teamId) {

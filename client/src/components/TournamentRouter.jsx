@@ -4,7 +4,6 @@ import { Spinner, Alert } from 'react-bootstrap'
 import * as api from '../api/tournament'
 import Tournament from '../pages/Tournament'
 import LeagueView from '../pages/LeagueView'
-import TournamentBackground from './tournament/TournamentBackground'
 
 /**
  * Carga el torneo y muestra la vista según deporte: pádel (Tournament) o liga (LeagueView).
@@ -65,7 +64,6 @@ export default function TournamentRouter({ isAdmin = false }) {
   if (useLeagueFormat) {
     return (
       <div className={themeClass}>
-        {!isAdmin && <TournamentBackground sport={tournament.sport || 'padel'} gender={tournament.gender} />}
         <div className="tournament-content">
           <LeagueView tournamentId={id} tournament={tournament} teamId={teamId} />
         </div>
@@ -75,7 +73,6 @@ export default function TournamentRouter({ isAdmin = false }) {
 
   return (
     <div className={themeClass}>
-      {!isAdmin && <TournamentBackground sport={tournament.sport || 'padel'} gender={tournament.gender} />}
       <div className="tournament-content">
         <Tournament isAdmin={isAdmin} tournament={tournament} />
       </div>

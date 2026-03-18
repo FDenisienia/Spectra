@@ -6,6 +6,7 @@ import TournamentConfig from '../components/tournament/TournamentConfig'
 import TournamentPlayers from '../components/tournament/TournamentPlayers'
 import RoundView from '../components/tournament/RoundView'
 import TournamentLogo from '../components/tournament/TournamentLogo'
+import '../styles/League.css'
 
 export default function Tournament({ isAdmin = false, tournament = {} }) {
   const { id: tournamentId } = useParams()
@@ -221,9 +222,10 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
       )}
 
 
-      <Container className="tournament-page-container py-3 py-md-4 py-lg-5">
-        <TournamentLogo sport={tournament.sport || 'padel'} gender={tournament.gender} darkBg={!isAdmin} />
-        <div className="mb-4 d-flex align-items-center flex-wrap gap-2 tournament-page-title">
+      <div className="league-page">
+        <Container className="league-page-container py-3 py-md-4 py-lg-5">
+          <TournamentLogo sport={tournament.sport || 'padel'} gender={tournament.gender} darkBg={!isAdmin} />
+          <div className="league-header mb-4">
           {isAdmin && editingName ? (
             <Form onSubmit={handleSaveName} className="d-flex align-items-center gap-2 flex-wrap w-100">
               <Form.Control
@@ -244,15 +246,20 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
             </Form>
           ) : (
             <>
-              <h1 className="mb-0">{tournamentName || 'Torneo'} — Pádel</h1>
+              <h1>{tournamentName || 'Torneo'}</h1>
+              <p className="subtitle mb-0">
+                Pádel · Escalera
+                {state?.config && state.currentDate != null && ` · Fecha ${state.currentDate}`}
+                {tournament.status === 'active' ? ' · Activo' : tournament.status === 'finished' ? ' · Finalizado' : ''}
+              </p>
               {isAdmin && (
-                <Button variant="outline-secondary" size="sm" onClick={handleStartEditName} className="align-baseline">
+                <Button variant="outline-secondary" size="sm" onClick={handleStartEditName} className="mt-2 align-baseline">
                   Editar nombre
                 </Button>
               )}
             </>
           )}
-        </div>
+          </div>
         {error && (
           <Alert variant="danger" dismissible onClose={() => setError(null)}>
             {typeof error === 'string' ? error : error?.message ?? String(error)}
@@ -315,22 +322,26 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
         ) : (
           <>
             {datesCount > 0 && (
-              <div className="mb-3 d-flex flex-wrap align-items-center gap-2 tournament-dates-buttons">
-                <span className="text-muted small me-1">Fechas:</span>
-                <div className="d-flex flex-wrap gap-1 overflow-x-auto">
+              <Card className="mb-4 league-zone-filter">
+                <Card.Body className="py-3 px-3 px-sm-4">
+                  <span className="text-muted small me-2 fw-medium">Fechas:</span>
                   {Array.from({ length: datesCount }, (_, i) => i + 1).map((num) => (
-                    <button
+                    <Button
                       key={num}
-                      type="button"
-                      className={`btn btn-sm ${viewingDate === num ? 'btn-primary' : 'btn-outline-secondary'}`}
+                      variant={viewingDate === num ? 'primary' : 'outline-secondary'}
+                      size="sm"
+                      className="me-2 mb-1"
                       onClick={() => setViewingDate(num)}
                     >
                       Fecha {num}
-                    </button>
+                    </Button>
                   ))}
-                </div>
-              </div>
+                </Card.Body>
+              </Card>
             )}
+            <Card className="mb-4">
+              <Card.Header className="fw-bold">Posiciones y partidos</Card.Header>
+              <Card.Body>
             <RoundView
               tournamentId={tournamentId}
               state={state}
@@ -344,9 +355,12 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
               loadingDateAction={actionLoading}
               readOnly={!isAdmin}
             />
+              </Card.Body>
+            </Card>
           </>
         )}
-      </Container>
+        </Container>
+      </div>
     </>
   )
 }

@@ -167,29 +167,6 @@ export const statements = [
     CONSTRAINT chk_playoff_cards_type CHECK (card_type IN ('yellow','red','green'))
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
-  `CREATE TABLE IF NOT EXISTS home_content (
-    \`key\` VARCHAR(50) PRIMARY KEY,
-    value TEXT NULL,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-  `CREATE TABLE IF NOT EXISTS home_gallery (
-    id VARCHAR(50) PRIMARY KEY,
-    url VARCHAR(1000) NOT NULL,
-    alt VARCHAR(255) NULL,
-    sort_order INT NOT NULL DEFAULT 0,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-  `CREATE TABLE IF NOT EXISTS home_sponsors (
-    id VARCHAR(50) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    logo_url VARCHAR(1000) NULL,
-    link VARCHAR(1000) NULL,
-    sort_order INT NOT NULL DEFAULT 0,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
   `CREATE TABLE IF NOT EXISTS league_suspensions (
     id VARCHAR(50) PRIMARY KEY,
     tournament_id VARCHAR(50) NOT NULL,
@@ -234,6 +211,13 @@ export const indexStatements = [
  * Ejecuta el esquema sobre una conexión/pool de MySQL (promesas).
  * @param {import('mysql2/promise').Pool} pool
  */
+/** Eliminación de tablas home (hero, galería, sponsors ya no en uso). */
+const dropHomeStatements = [
+  'DROP TABLE IF EXISTS home_sponsors',
+  'DROP TABLE IF EXISTS home_gallery',
+  'DROP TABLE IF EXISTS home_content',
+]
+
 /** Migraciones para bases ya creadas. */
 const migrationStatements = [
   'ALTER TABLE league_config ADD COLUMN fase_final_activa TINYINT(1) NOT NULL DEFAULT 0 AFTER qualify_per_zone',
@@ -269,6 +253,14 @@ const migrationFkStatements = [
 export async function createSchema(pool) {
   const conn = await pool.getConnection()
   try {
+    for (const sql of dropHomeStatements) {
+      try {
+        await conn.query(sql)
+      } catch (err) {
+        // ER_BAD_TABLE_ERROR: tabla no existe
+        if (err.code !== 'ER_BAD_TABLE_ERROR') throw err
+      }
+    }
     for (const sql of statements) {
       await conn.query(sql)
     }

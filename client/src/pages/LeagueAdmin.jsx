@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { Container, Navbar, Nav, Card, Table, Button, Spinner, Alert, Modal, Form, Tabs, Tab, Row, Col } from 'react-bootstrap'
 import * as api from '../api/league'
 import * as tournamentApi from '../api/tournament'
+import { isLeagueFormat } from '../utils/tournamentFormat'
 import '../styles/League.css'
 
 export default function LeagueAdmin() {
@@ -65,20 +66,30 @@ export default function LeagueAdmin() {
   const loadAll = () => {
     if (!tournamentId) return
     setLoading(true)
-    Promise.all([
-      tournamentApi.getTournament(tournamentId),
-      api.getTeams(tournamentId),
-      api.getMatchdays(tournamentId),
-      api.getConfig(tournamentId),
-      api.getZones(tournamentId),
-      api.getScorers(tournamentId),
-      api.getDiscipline(tournamentId),
-      api.getPlayoffBracket(tournamentId).catch(() => []),
-      api.getSuspensions(tournamentId).catch(() => []),
-      api.getDisciplineHistory(tournamentId).catch(() => []),
-    ])
-      .then(([t, te, mds, cfg, z, sc, disc, playoff, susp, discHist]) => {
+    setError(null)
+    // Primero obtener torneo y verificar que sea de liga antes de llamar APIs de liga
+    tournamentApi.getTournament(tournamentId)
+      .then((t) => {
         setTournament(t)
+        if (!isLeagueFormat(t)) {
+          setError('Este torneo no usa formato de liga.')
+          setLoading(false)
+          return
+        }
+        return Promise.all([
+          api.getTeams(tournamentId),
+          api.getMatchdays(tournamentId),
+          api.getConfig(tournamentId),
+          api.getZones(tournamentId),
+          api.getScorers(tournamentId),
+          api.getDiscipline(tournamentId),
+          api.getPlayoffBracket(tournamentId).catch(() => []),
+          api.getSuspensions(tournamentId).catch(() => []),
+          api.getDisciplineHistory(tournamentId).catch(() => []),
+        ])
+      .then((data) => {
+        if (!data) return
+        const [te, mds, cfg, z, sc, disc, playoff, susp, discHist] = data
         setTeams(te || [])
         setMatchdays(mds || [])
         setConfig(cfg || { points_win: 3, points_draw: 1, points_loss: 0, round_trip: false, fase_final_activa: false, odd_team_to: 'upper' })
@@ -115,8 +126,9 @@ export default function LeagueAdmin() {
           setStandings([])
         })
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
+    })
+    .catch((e) => setError(e.message))
+    .finally(() => setLoading(false))
   }
 
   useEffect(() => {

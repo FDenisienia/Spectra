@@ -166,7 +166,6 @@ export default function AdminDashboard() {
           <Navbar.Toggle aria-controls="admin-nav" />
           <Navbar.Collapse id="admin-nav">
             <Nav className="ms-auto">
-              <Nav.Link as={Link} to="/admin/home">Contenido Home</Nav.Link>
               <Nav.Link as={Link} to="/">Ver web pública</Nav.Link>
               <Button variant="outline-light" size="sm" onClick={() => { setPasswordForm({ current: '', new: '', confirm: '' }); setShowPasswordModal(true); }}>
                 Cambiar contraseña
@@ -185,16 +184,6 @@ export default function AdminDashboard() {
             {error}
           </Alert>
         )}
-
-        <Card as={Link} to="/admin/home" className="mb-4 shadow-sm text-decoration-none" style={{ color: 'inherit' }}>
-          <Card.Body className="d-flex align-items-center justify-content-between py-3">
-            <div>
-              <h2 className="h6 mb-1 fw-bold">Contenido de la Home</h2>
-              <p className="mb-0 small text-muted">Hero, galería de fotos y sponsors</p>
-            </div>
-            <span className="text-primary">→</span>
-          </Card.Body>
-        </Card>
 
         <Card className="shadow-sm">
           <Card.Header className="d-flex justify-content-between align-items-center">
