@@ -25,6 +25,7 @@ const FORMATO_PADEL = [
   { value: 'liga', label: 'Liga (parejas)', desc: 'Tabla única, fixture todos contra todos' },
 ]
 const STATUS_OPTIONS = [{ value: 'active', label: 'Activo' }, { value: 'finished', label: 'Finalizado' }]
+const REGLAMENTO_MAX_BYTES = 5 * 1024 * 1024
 const GENDER_OPTIONS = [
   { value: 'masculino', label: 'Masculino' },
   { value: 'femenino', label: 'Femenino' },
@@ -49,8 +50,9 @@ export default function AdminDashboard() {
     status: 'active',
     start_date: '',
     end_date: '',
-    rules: '',
   })
+  const [reglamentoFile, setReglamentoFile] = useState(null)
+  const [reglamentoInputKey, setReglamentoInputKey] = useState(0)
 
   const load = () => {
     setLoading(true)
@@ -76,9 +78,37 @@ export default function AdminDashboard() {
       status: 'active',
       start_date: '',
       end_date: '',
-      rules: '',
     })
+    setReglamentoFile(null)
+    setReglamentoInputKey((k) => k + 1)
     setShowCreateModal(true)
+  }
+
+  const handleReglamentoChange = (e) => {
+    const f = e.target.files?.[0]
+    if (!f) {
+      setReglamentoFile(null)
+      return
+    }
+    if (f.size > REGLAMENTO_MAX_BYTES) {
+      setError('El PDF no puede superar 5 MB')
+      e.target.value = ''
+      setReglamentoFile(null)
+      return
+    }
+    if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
+      setError('Solo se permiten archivos PDF')
+      e.target.value = ''
+      setReglamentoFile(null)
+      return
+    }
+    setReglamentoFile(f)
+    setError(null)
+  }
+
+  const clearReglamentoSelection = () => {
+    setReglamentoFile(null)
+    setReglamentoInputKey((k) => k + 1)
   }
 
   const handleSportChange = (newSport) => {
@@ -91,17 +121,18 @@ export default function AdminDashboard() {
     setCreating(true)
     setError(null)
     try {
-      const payload = {
-        name: form.name.trim() || undefined,
-        sport: form.sport,
-        modality: form.modality,
-        gender: form.sport === 'futbol' ? (form.gender || null) : null,
-        status: form.status,
-        start_date: form.start_date || null,
-        end_date: form.end_date || null,
-        rules: form.rules || '',
+      const fd = new FormData()
+      fd.append('name', form.name.trim())
+      fd.append('sport', form.sport)
+      fd.append('modality', form.modality)
+      fd.append('gender', form.sport === 'futbol' ? (form.gender || '') : '')
+      fd.append('status', form.status)
+      fd.append('start_date', form.start_date || '')
+      fd.append('end_date', form.end_date || '')
+      if (reglamentoFile) {
+        fd.append('reglamento', reglamentoFile, reglamentoFile.name)
       }
-      const created = await api.createTournament(payload)
+      const created = await api.createTournament(fd)
       setShowCreateModal(false)
       if (created.sport === 'padel') {
         navigate(`/admin/torneo/${created.id}`)
@@ -321,14 +352,24 @@ export default function AdminDashboard() {
                 />
               </Form.Group>
               <Form.Group className="mb-3">
-                <Form.Label>Reglamento (visible públicamente)</Form.Label>
-                <Form.Control
-                  as="textarea"
-                  rows={3}
-                  value={form.rules}
-                  onChange={(e) => setForm((f) => ({ ...f, rules: e.target.value }))}
-                  placeholder="Opcional"
-                />
+                <Form.Label>Reglamento (PDF, opcional · máx. 5 MB)</Form.Label>
+                <div className="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2">
+                  <Form.Control
+                    key={reglamentoInputKey}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={handleReglamentoChange}
+                    className="flex-grow-1"
+                  />
+                  {reglamentoFile && (
+                    <Button variant="outline-secondary" size="sm" type="button" onClick={clearReglamentoSelection}>
+                      Quitar archivo
+                    </Button>
+                  )}
+                </div>
+                {reglamentoFile && (
+                  <Form.Text className="text-muted d-block mt-2">{reglamentoFile.name}</Form.Text>
+                )}
               </Form.Group>
             </Modal.Body>
             <Modal.Footer>

@@ -42,6 +42,15 @@ export async function getTournaments(status = null) {
 }
 
 export async function createTournament(data) {
+  if (data instanceof FormData) {
+    const res = await fetch(`${BASE}/tournaments`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: data,
+    })
+    if (!res.ok) throw new Error(await parseError(res))
+    return res.json()
+  }
   const body = typeof data === 'string' || data == null ? { name: data } : data
   const res = await fetch(`${BASE}/tournaments`, {
     method: 'POST',
@@ -59,10 +68,11 @@ export async function getTournament(id) {
 }
 
 export async function updateTournament(id, payload) {
+  const isForm = payload instanceof FormData
   const res = await fetch(`${BASE}/tournament/${id}`, {
     method: 'PATCH',
-    headers: jsonHeaders(),
-    body: JSON.stringify(payload),
+    headers: isForm ? authHeaders() : jsonHeaders(),
+    body: isForm ? payload : JSON.stringify(payload),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()

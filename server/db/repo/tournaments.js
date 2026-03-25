@@ -1,6 +1,6 @@
 import { pool } from '../index.js'
 
-function generateId() {
+export function generateTournamentId() {
   return 't-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9)
 }
 
@@ -17,6 +17,7 @@ function rowToTournament(row) {
     start_date: row.start_date,
     end_date: row.end_date,
     rules: row.rules,
+    reglamento_url: row.reglamento_url || null,
     createdAt: row.created_at,
     updated_at: row.updated_at,
     state,
@@ -39,7 +40,7 @@ export async function getAllPadelWithState() {
 }
 
 export async function getAll(filters = {}) {
-  let sql = 'SELECT id, name, sport, modality, gender, status, start_date, end_date, rules, created_at, updated_at, state_json FROM tournaments WHERE 1=1'
+  let sql = 'SELECT id, name, sport, modality, gender, status, start_date, end_date, rules, reglamento_url, created_at, updated_at, state_json FROM tournaments WHERE 1=1'
   const params = []
   if (filters.status) {
     sql += ' AND status = ?'
@@ -61,6 +62,7 @@ export async function getAll(filters = {}) {
     start_date: r.start_date,
     end_date: r.end_date,
     rules: r.rules,
+    reglamento_url: r.reglamento_url || null,
     createdAt: r.created_at,
     config: r.state_json ? JSON.parse(r.state_json)?.config : null,
     currentDate: r.state_json ? JSON.parse(r.state_json)?.currentDate : null,
@@ -70,14 +72,14 @@ export async function getAll(filters = {}) {
 
 export async function getById(id) {
   const [rows] = await pool.query(
-    'SELECT id, name, sport, modality, gender, status, start_date, end_date, rules, created_at, updated_at, state_json FROM tournaments WHERE id = ?',
+    'SELECT id, name, sport, modality, gender, status, start_date, end_date, rules, reglamento_url, created_at, updated_at, state_json FROM tournaments WHERE id = ?',
     [id]
   )
   return rows.length ? rowToTournament(rows[0]) : null
 }
 
 export async function create(data) {
-  const id = data.id || generateId()
+  const id = data.id || generateTournamentId()
   const name = (data.name && String(data.name).trim()) || `Torneo ${id}`
   const sport = data.sport || 'padel'
   const modality = data.modality || (sport === 'padel' ? 'escalera' : 'liga')
@@ -86,12 +88,13 @@ export async function create(data) {
   const start_date = data.start_date || null
   const end_date = data.end_date || null
   const rules = data.rules != null ? data.rules : ''
+  const reglamento_url = data.reglamento_url != null ? data.reglamento_url : null
   const state_json = data.state_json != null ? data.state_json : null
   const created_at = new Date().toISOString().slice(0, 19).replace('T', ' ')
   await pool.query(
-    `INSERT INTO tournaments (id, name, sport, modality, gender, status, start_date, end_date, rules, created_at, state_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, name, sport, modality, gender, status, start_date, end_date, rules, created_at, state_json]
+    `INSERT INTO tournaments (id, name, sport, modality, gender, status, start_date, end_date, rules, reglamento_url, created_at, state_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, name, sport, modality, gender, status, start_date, end_date, rules, reglamento_url, created_at, state_json]
   )
   return getById(id)
 }
@@ -130,6 +133,10 @@ export async function update(id, data) {
   if (data.rules !== undefined) {
     updates.push('rules = ?')
     params.push(data.rules)
+  }
+  if (data.reglamento_url !== undefined) {
+    updates.push('reglamento_url = ?')
+    params.push(data.reglamento_url)
   }
   if (data.state_json !== undefined) {
     updates.push('state_json = ?')

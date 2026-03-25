@@ -5,6 +5,7 @@ import * as api from '../api/league'
 import TeamDetail from './TeamDetail'
 import TournamentLogo from '../components/tournament/TournamentLogo'
 import { isLeagueFormat } from '../utils/tournamentFormat'
+import { reglamentoPublicHref } from '../utils/reglamentoUrl'
 import '../styles/League.css'
 
 export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
@@ -148,12 +149,29 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
       <Container className="league-page-container py-3 py-md-4 py-lg-5">
         <TournamentLogo sport={tournament.sport} gender={tournament.gender} darkBg />
         <div className="league-header mb-4">
-          <h1>{tournament.name || 'Liga'}</h1>
-          <p className="subtitle mb-0">
-            {tournament.sport === 'futbol' ? 'Fútbol' : tournament.sport === 'hockey' ? 'Hockey' : 'Pádel'}
-            {tournament.sport === 'futbol' && tournament.gender && ` · ${tournament.gender === 'masculino' ? 'Masculino' : tournament.gender === 'femenino' ? 'Femenino' : 'Mixto'}`}
-            {tournament.status === 'active' ? ' · Activo' : tournament.status === 'finished' ? ' · Finalizado' : ''}
-          </p>
+          <div className="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-start justify-content-between gap-2 gap-sm-3">
+            <div className="min-w-0 flex-grow-1">
+              <h1>{tournament.name || 'Liga'}</h1>
+              <p className="subtitle mb-0">
+                {tournament.sport === 'futbol' ? 'Fútbol' : tournament.sport === 'hockey' ? 'Hockey' : 'Pádel'}
+                {tournament.sport === 'futbol' && tournament.gender && ` · ${tournament.gender === 'masculino' ? 'Masculino' : tournament.gender === 'femenino' ? 'Femenino' : 'Mixto'}`}
+                {tournament.status === 'active' ? ' · Activo' : tournament.status === 'finished' ? ' · Finalizado' : ''}
+              </p>
+            </div>
+            {tournament.reglamento_url && (
+              <Button
+                as="a"
+                variant="outline-primary"
+                size="sm"
+                className="flex-shrink-0 align-self-start league-header-reglamento-btn"
+                href={reglamentoPublicHref(tournament.reglamento_url)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Reglamento
+              </Button>
+            )}
+          </div>
         </div>
 
         {error && (

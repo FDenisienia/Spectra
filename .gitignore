@@ -6,6 +6,9 @@ node_modules/
 .env.local
 .env.*.local
 
+# PDFs de reglamentos (almacenamiento local del servidor)
+server/uploads/
+
 # Build
 dist/
 build/

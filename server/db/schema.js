@@ -21,6 +21,7 @@ export const statements = [
     start_date DATE NULL,
     end_date DATE NULL,
     rules TEXT NULL,
+    reglamento_url VARCHAR(500) NULL,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     state_json LONGTEXT NULL,
@@ -243,6 +244,7 @@ const migrationStatements = [
   "ALTER TABLE league_suspensions DROP CHECK chk_suspensions_reason",
   "ALTER TABLE league_suspensions ADD CONSTRAINT chk_suspensions_reason CHECK (reason IN ('yellow_accumulation','green_accumulation','red_direct'))",
   "ALTER TABLE tournaments ADD COLUMN gender VARCHAR(20) NULL AFTER modality",
+  'ALTER TABLE tournaments ADD COLUMN reglamento_url VARCHAR(500) NULL AFTER rules',
 ]
 const migrationFkStatements = [
   'ALTER TABLE league_teams ADD CONSTRAINT fk_league_teams_zone FOREIGN KEY (zone_id) REFERENCES league_zones(id) ON DELETE SET NULL',

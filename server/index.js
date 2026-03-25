@@ -1,4 +1,6 @@
 import './loadEnv.js'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import express from 'express'
 import cors from 'cors'
 import {
@@ -24,8 +26,20 @@ import * as tournamentsRepo from './db/repo/tournaments.js'
 import * as leagueRepo from './db/repo/league.js'
 import { login, requireAuth, changePassword } from './auth.js'
 import { normalizePlayedAtForDb } from './playedAt.js'
+import {
+  ensureReglamentosDir,
+  publicReglamentoPath,
+  validatePdfFile,
+  removeReglamentoFile,
+  createReglamentoUploader,
+  unlinkSilent,
+} from './reglamentoUpload.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
+const uploadReglamentoCreate = createReglamentoUploader((req) => req._pendingTournamentId)
+const uploadReglamentoPatch = createReglamentoUploader((req) => req.params.id)
 const PORT = process.env.PORT || 3000
 
 // CORS: headers manuales + cors() para garantizar compatibilidad
@@ -38,6 +52,7 @@ app.use((req, res, next) => {
 })
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }))
 app.use(express.json())
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads'), { index: false }))
 
 /** Torneo usa sistema de liga (grupos, equipos/parejas, jornadas): futbol, hockey, o padel con modalidad grupo/liga */
 function isLeagueTournament(t) {
@@ -142,11 +157,35 @@ app.get('/api/tournaments', async (req, res) => {
   }
 })
 
-app.post('/api/tournaments', requireAuth, async (req, res) => {
+function tournamentCreateMultipart(req, res, next) {
+  const ct = req.headers['content-type'] || ''
+  if (!ct.includes('multipart/form-data')) return next()
+  req._pendingTournamentId = tournamentsRepo.generateTournamentId()
+  return uploadReglamentoCreate.single('reglamento')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Error al subir el archivo' })
+    }
+    next()
+  })
+}
+
+app.post('/api/tournaments', requireAuth, tournamentCreateMultipart, async (req, res) => {
   try {
     const { name, sport, modality, gender, status, start_date, end_date, rules } = req.body || {}
     const state = sport === 'padel' && (modality === 'escalera' || !modality) ? defaultState() : null
+    const isMultipart = Boolean(req._pendingTournamentId)
+    let reglamento_url = null
+    if (req.file) {
+      try {
+        await validatePdfFile(req.file.path)
+      } catch (e) {
+        await unlinkSilent(req.file.path)
+        return res.status(400).json({ error: e.message || 'Archivo inválido' })
+      }
+      reglamento_url = publicReglamentoPath(req._pendingTournamentId)
+    }
     const row = await tournamentsRepo.create({
+      id: isMultipart ? req._pendingTournamentId : undefined,
       name: name && String(name).trim() ? String(name).trim() : undefined,
       sport: sport || 'padel',
       modality: modality || (sport === 'padel' ? 'escalera' : 'liga'),
@@ -155,6 +194,7 @@ app.post('/api/tournaments', requireAuth, async (req, res) => {
       start_date: start_date || null,
       end_date: end_date || null,
       rules: rules != null ? rules : '',
+      reglamento_url,
       state_json: state ? JSON.stringify(state) : null,
     })
     res.status(201).json({
@@ -167,10 +207,12 @@ app.post('/api/tournaments', requireAuth, async (req, res) => {
       start_date: row.start_date,
       end_date: row.end_date,
       rules: row.rules,
+      reglamento_url: row.reglamento_url,
       createdAt: row.createdAt,
       state: row.state,
     })
   } catch (e) {
+    if (req.file) await unlinkSilent(req.file.path)
     res.status(400).json({ error: e.message })
   }
 })
@@ -190,6 +232,7 @@ app.get('/api/tournament/:id', async (req, res) => {
       start_date: t.start_date,
       end_date: t.end_date,
       rules: t.rules,
+      reglamento_url: t.reglamento_url,
       createdAt: t.createdAt,
       state: t.state,
     })
@@ -198,11 +241,27 @@ app.get('/api/tournament/:id', async (req, res) => {
   }
 })
 
-app.patch('/api/tournament/:id', requireAuth, async (req, res) => {
+function tournamentPatchMultipart(req, res, next) {
+  const ct = req.headers['content-type'] || ''
+  if (!ct.includes('multipart/form-data')) return next()
+  return uploadReglamentoPatch.single('reglamento')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Error al subir el archivo' })
+    }
+    next()
+  })
+}
+
+app.patch('/api/tournament/:id', requireAuth, tournamentPatchMultipart, async (req, res) => {
   try {
     const t = await tournamentsRepo.getById(req.params.id)
     if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
-    const { name, sport, modality, gender, status, start_date, end_date, rules } = req.body || {}
+    const body = req.body || {}
+    const { name, sport, modality, gender, status, start_date, end_date, rules } = body
+    const clearReglamento =
+      body.clear_reglamento === true ||
+      body.clear_reglamento === 'true' ||
+      body.clear_reglamento === '1'
     const updates = {}
     if (name != null && String(name).trim()) updates.name = String(name).trim()
     if (sport != null) updates.sport = sport
@@ -212,15 +271,32 @@ app.patch('/api/tournament/:id', requireAuth, async (req, res) => {
     if (start_date !== undefined) updates.start_date = start_date
     if (end_date !== undefined) updates.end_date = end_date
     if (rules !== undefined) updates.rules = rules
+    if (req.file) {
+      try {
+        await validatePdfFile(req.file.path)
+      } catch (e) {
+        await unlinkSilent(req.file.path)
+        return res.status(400).json({ error: e.message || 'Archivo inválido' })
+      }
+      updates.reglamento_url = publicReglamentoPath(req.params.id)
+    } else if (clearReglamento) {
+      await removeReglamentoFile(req.params.id)
+      updates.reglamento_url = null
+    }
     const updated = await tournamentsRepo.update(req.params.id, updates)
     res.json(updated)
   } catch (e) {
+    if (req.file) await unlinkSilent(req.file.path)
     res.status(400).json({ error: e.message })
   }
 })
 
 app.delete('/api/tournament/:id', requireAuth, async (req, res) => {
   try {
+    const existing = await tournamentsRepo.getById(req.params.id)
+    if (existing?.reglamento_url) {
+      await removeReglamentoFile(req.params.id)
+    }
     const ok = await tournamentsRepo.remove(req.params.id)
     if (!ok) return res.status(404).json({ error: 'Torneo no encontrado' })
     res.status(204).send()
@@ -1014,6 +1090,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`API: http://localhost:${PORT}/api/health`)
   console.log(`Torneos: http://localhost:${PORT}/api/tournaments`)
   ensureSchema()
+    .then(() => ensureReglamentosDir())
     .then(() => seedAdmin())
     .then(() => console.log('[Spectra] Base de datos lista'))
     .catch((err) => console.error('[Spectra] Error init DB:', err.message))

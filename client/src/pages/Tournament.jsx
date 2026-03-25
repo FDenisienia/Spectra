@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { Container, Navbar, Nav, Alert, Spinner, Form, Button, Card } from 'react-bootstrap'
 import * as api from '../api/tournament'
+import { reglamentoPublicHref } from '../utils/reglamentoUrl'
 import TournamentConfig from '../components/tournament/TournamentConfig'
 import TournamentPlayers from '../components/tournament/TournamentPlayers'
 import RoundView from '../components/tournament/RoundView'
@@ -14,6 +15,10 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
   const [state, setState] = useState(null)
   const [tournamentName, setTournamentName] = useState('')
   const [tournamentRules, setTournamentRules] = useState('')
+  const [reglamentoUrl, setReglamentoUrl] = useState(null)
+  const [reglamentoFile, setReglamentoFile] = useState(null)
+  const [reglamentoSaving, setReglamentoSaving] = useState(false)
+  const [reglamentoInputKey, setReglamentoInputKey] = useState(0)
   const [editingName, setEditingName] = useState(false)
   const [editNameValue, setEditNameValue] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -55,6 +60,7 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
         if (cancelled) return
         setTournamentName(t.name ?? '')
         setTournamentRules(t.rules ?? '')
+        setReglamentoUrl(t.reglamento_url ?? null)
         setState(t.state ?? null)
         setError(null)
         if (t.state?.status === 'date' || t.state?.status === 'date_complete') {
@@ -182,6 +188,64 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
     setEditingName(true)
   }
 
+  const REGLAMENTO_MAX_BYTES = 5 * 1024 * 1024
+
+  const handleReglamentoFileChange = (e) => {
+    const f = e.target.files?.[0]
+    if (!f) {
+      setReglamentoFile(null)
+      return
+    }
+    if (f.size > REGLAMENTO_MAX_BYTES) {
+      setError('El PDF no puede superar 5 MB')
+      e.target.value = ''
+      setReglamentoFile(null)
+      return
+    }
+    if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
+      setError('Solo se permiten archivos PDF')
+      e.target.value = ''
+      setReglamentoFile(null)
+      return
+    }
+    setReglamentoFile(f)
+    setError(null)
+  }
+
+  const handleSaveReglamento = async () => {
+    if (!reglamentoFile) return
+    setReglamentoSaving(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('reglamento', reglamentoFile, reglamentoFile.name)
+      const updated = await api.updateTournament(tournamentId, fd)
+      setReglamentoUrl(updated.reglamento_url ?? null)
+      setReglamentoFile(null)
+      setReglamentoInputKey((k) => k + 1)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setReglamentoSaving(false)
+    }
+  }
+
+  const handleRemoveReglamento = async () => {
+    if (!window.confirm('¿Quitar el reglamento publicado?')) return
+    setReglamentoSaving(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('clear_reglamento', '1')
+      const updated = await api.updateTournament(tournamentId, fd)
+      setReglamentoUrl(updated.reglamento_url ?? null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setReglamentoSaving(false)
+    }
+  }
+
   const handleSaveName = async (e) => {
     if (e) e.preventDefault()
     const name = editNameValue.trim()
@@ -246,16 +310,71 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
             </Form>
           ) : (
             <>
-              <h1>{tournamentName || 'Torneo'}</h1>
-              <p className="subtitle mb-0">
-                Pádel · Escalera
-                {state?.config && state.currentDate != null && ` · Fecha ${state.currentDate}`}
-                {tournament.status === 'active' ? ' · Activo' : tournament.status === 'finished' ? ' · Finalizado' : ''}
-              </p>
+              <div className="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-start justify-content-between gap-2 gap-sm-3">
+                <div className="min-w-0 flex-grow-1">
+                  <h1>{tournamentName || 'Torneo'}</h1>
+                  <p className="subtitle mb-0">
+                    Pádel · Escalera
+                    {state?.config && state.currentDate != null && ` · Fecha ${state.currentDate}`}
+                    {tournament.status === 'active' ? ' · Activo' : tournament.status === 'finished' ? ' · Finalizado' : ''}
+                  </p>
+                </div>
+                {reglamentoUrl && (
+                  <Button
+                    variant="outline-primary"
+                    size="sm"
+                    className="flex-shrink-0 align-self-start league-header-reglamento-btn"
+                    as="a"
+                    href={reglamentoPublicHref(reglamentoUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Reglamento
+                  </Button>
+                )}
+              </div>
               {isAdmin && (
-                <Button variant="outline-secondary" size="sm" onClick={handleStartEditName} className="mt-2 align-baseline">
-                  Editar nombre
-                </Button>
+                <div className="mt-2 d-flex flex-column gap-2">
+                  <Button variant="outline-secondary" size="sm" onClick={handleStartEditName} className="align-self-start">
+                    Editar nombre
+                  </Button>
+                  <div className="d-flex flex-column flex-md-row flex-wrap align-items-stretch align-items-md-center gap-2">
+                    <Form.Control
+                      key={reglamentoInputKey}
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      onChange={handleReglamentoFileChange}
+                      className="flex-grow-1"
+                      style={{ maxWidth: 'min(100%, 280px)' }}
+                      disabled={reglamentoSaving}
+                    />
+                    <div className="d-flex flex-wrap gap-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        type="button"
+                        onClick={handleSaveReglamento}
+                        disabled={reglamentoSaving || !reglamentoFile}
+                      >
+                        {reglamentoSaving ? <Spinner animation="border" size="sm" /> : 'Guardar PDF'}
+                      </Button>
+                      {reglamentoUrl && (
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          type="button"
+                          onClick={handleRemoveReglamento}
+                          disabled={reglamentoSaving}
+                        >
+                          Quitar reglamento
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {reglamentoFile && (
+                    <span className="small text-muted">{reglamentoFile.name}</span>
+                  )}
+                </div>
               )}
             </>
           )}

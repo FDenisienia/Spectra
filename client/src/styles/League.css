@@ -43,6 +43,19 @@
   margin-top: 0.35rem;
 }
 
+/* Reglamento en cabecera: blanco sobre fondos de tema (verde, etc.) */
+.league-header .league-header-reglamento-btn.btn-outline-primary {
+  --bs-btn-color: #fff;
+  --bs-btn-border-color: #fff;
+  --bs-btn-hover-color: #1a1a1a;
+  --bs-btn-hover-bg: #fff;
+  --bs-btn-hover-border-color: #fff;
+  --bs-btn-active-color: #1a1a1a;
+  --bs-btn-active-bg: #fff;
+  --bs-btn-active-border-color: #fff;
+  --bs-btn-focus-shadow-rgb: 255, 255, 255;
+}
+
 /* En móvil: barra del torneo/equipo al 100% del ancho */
 @media (max-width: 767.98px) {
   .league-page .league-header {
@@ -1201,6 +1214,21 @@
 
 .league-match-events-validation-alert {
   margin-bottom: 1rem;
+}
+
+/* Goles por equipo en el modal (local vs visitante) */
+.league-goals-team-block__title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--bs-secondary, #6c757d);
+  margin-bottom: 0.35rem;
+}
+
+.league-goals-team-block__table {
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.375rem;
 }
 
 .league-match-score-inline-error {
