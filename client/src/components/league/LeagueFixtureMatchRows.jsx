@@ -1,4 +1,4 @@
-import { Button, Form } from 'react-bootstrap'
+import { Button, Form, Alert } from 'react-bootstrap'
 import { formatMatchDateTimeArgentina } from '../../utils/matchDateTime'
 
 /** Fecha legible o placeholder sin guiones sueltos como único contenido */
@@ -24,6 +24,7 @@ export function LeagueFixtureMatchRow({
   onDeleteMatch,
   matchdayId,
   saving,
+  scoreInlineError,
 }) {
   const editing = editingMatchId === match.id
   const played = match.status === 'played'
@@ -34,7 +35,7 @@ export function LeagueFixtureMatchRow({
         <Form.Control
           type="number"
           size="sm"
-          className="league-match-score__input"
+          className={`league-match-score__input${scoreInlineError ? ' is-invalid' : ''}`}
           value={matchScoreForm.home_score}
           onChange={(e) => setMatchScoreForm((f) => ({ ...f, home_score: e.target.value }))}
         />
@@ -42,7 +43,7 @@ export function LeagueFixtureMatchRow({
         <Form.Control
           type="number"
           size="sm"
-          className="league-match-score__input"
+          className={`league-match-score__input${scoreInlineError ? ' is-invalid' : ''}`}
           value={matchScoreForm.away_score}
           onChange={(e) => setMatchScoreForm((f) => ({ ...f, away_score: e.target.value }))}
         />
@@ -84,6 +85,11 @@ export function LeagueFixtureMatchRow({
           Cancelar
         </Button>
       </div>
+      {scoreInlineError && (
+        <Alert variant="danger" className="league-match-score-inline-error py-2 px-2 small mb-0 mt-2">
+          {scoreInlineError}
+        </Alert>
+      )}
     </div>
   ) : played ? (
     <div className="league-match-score league-match-score--played">

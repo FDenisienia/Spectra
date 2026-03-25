@@ -1,10 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Container, Navbar, Nav, Card, Table, Button, Spinner, Alert, Modal, Form, Tabs, Tab, Row, Col } from 'react-bootstrap'
 import * as api from '../api/league'
 import { playedAtToDatetimeLocal } from '../utils/matchDateTime'
 import * as tournamentApi from '../api/tournament'
 import { isLeagueFormat } from '../utils/tournamentFormat'
+import {
+  validateMatchGoalsVsScore,
+  validateMatchCards,
+  validateGoalAddition,
+  validateCardAddition,
+} from '../utils/matchEventsValidation'
 import { LeagueFixtureMatchRow, LeaguePlayoffFixtureRow } from '../components/league/LeagueFixtureMatchRows'
 import '../styles/League.css'
 
@@ -62,6 +68,61 @@ export default function LeagueAdmin() {
   const [playoffBracket, setPlayoffBracket] = useState([])
   const [editingPlayoffMatchId, setEditingPlayoffMatchId] = useState(null)
   const [activeTab, setActiveTab] = useState('teams')
+  const [matchScoreInlineError, setMatchScoreInlineError] = useState(null)
+  const [goalsCardsActionError, setGoalsCardsActionError] = useState(null)
+
+  const setEditingMatchIdSafe = (id) => {
+    setMatchScoreInlineError(null)
+    setEditingMatchId(id)
+  }
+
+  const findMatchById = (matchId) => {
+    for (const md of matchdays) {
+      const list = matchdayMatches[md.id] || []
+      const found = list.find((x) => x.id === matchId)
+      if (found) return found
+    }
+    return null
+  }
+
+  const liveMatchEventsValidation = useMemo(() => {
+    if (!showGoalsCardsModal || !editingMatchForGoals) {
+      return { ok: true, message: null, affectedFields: [] }
+    }
+    const m = editingMatchForGoals
+    const validateGoals =
+      m.status === 'played' && m.home_score != null && m.away_score != null
+    if (validateGoals) {
+      const g = validateMatchGoalsVsScore({
+        homeScore: m.home_score,
+        awayScore: m.away_score,
+        homeTeamId: m.home_team_id,
+        awayTeamId: m.away_team_id,
+        goals: matchGoals,
+      })
+      if (!g.ok) {
+        return {
+          ok: false,
+          message: g.message,
+          affectedFields: g.affectedFields || ['goals'],
+        }
+      }
+    }
+    const c = validateMatchCards({
+      cards: matchCards,
+      playersByTeam,
+      homeTeamId: m.home_team_id,
+      awayTeamId: m.away_team_id,
+    })
+    if (!c.ok) {
+      return {
+        ok: false,
+        message: c.message,
+        affectedFields: c.affectedFields || ['cards'],
+      }
+    }
+    return { ok: true, message: null, affectedFields: [] }
+  }, [showGoalsCardsModal, editingMatchForGoals, matchGoals, matchCards, playersByTeam])
 
   const loadTournament = () => {
     if (!tournamentId) return
@@ -283,6 +344,7 @@ export default function LeagueAdmin() {
 
   const openGoalsCardsModal = (match) => {
     setEditingMatchForGoals(match)
+    setGoalsCardsActionError(null)
     setGoalForm({ player_name: '', team_id: match?.home_team_id || '', goals: '1' })
     setCardForm({ player_name: '', team_id: match?.home_team_id || '', card_type: 'yellow', suspension_dates: 1 })
     if (!match?.id) return
@@ -306,6 +368,26 @@ export default function LeagueAdmin() {
   const handleAddGoal = async (e) => {
     e.preventDefault()
     if (!editingMatchForGoals?.id || !goalForm.player_name || !goalForm.team_id) return
+    const shouldValidateGoals =
+      editingMatchForGoals.status === 'played' &&
+      editingMatchForGoals.home_score != null &&
+      editingMatchForGoals.away_score != null
+    if (shouldValidateGoals) {
+      const r = validateGoalAddition({
+        homeScore: editingMatchForGoals.home_score,
+        awayScore: editingMatchForGoals.away_score,
+        currentGoals: matchGoals,
+        additionalGoals: goalForm.goals,
+        homeTeamId: editingMatchForGoals.home_team_id,
+        awayTeamId: editingMatchForGoals.away_team_id,
+        goalTeamId: goalForm.team_id,
+      })
+      if (!r.ok) {
+        setGoalsCardsActionError(r.message)
+        return
+      }
+    }
+    setGoalsCardsActionError(null)
     setSaving(true)
     try {
       await api.addGoal(tournamentId, editingMatchForGoals.id, {
@@ -316,6 +398,7 @@ export default function LeagueAdmin() {
       const [goals] = await Promise.all([api.getGoals(tournamentId, editingMatchForGoals.id)])
       setMatchGoals(goals || [])
       setGoalForm({ player_name: '', team_id: goalForm.team_id, goals: '1' })
+      setGoalsCardsActionError(null)
       loadAll()
     } catch (err) {
       setError(err.message)
@@ -329,6 +412,7 @@ export default function LeagueAdmin() {
       await api.deleteGoal(tournamentId, goalId)
       const [goals] = await Promise.all([api.getGoals(tournamentId, editingMatchForGoals.id)])
       setMatchGoals(goals || [])
+      setGoalsCardsActionError(null)
       loadAll()
     } catch (err) {
       setError(err.message)
@@ -338,6 +422,22 @@ export default function LeagueAdmin() {
   const handleAddCard = async (e) => {
     e.preventDefault()
     if (!editingMatchForGoals?.id || !cardForm.player_name || !cardForm.team_id) return
+    const cr = validateCardAddition({
+      cards: matchCards,
+      playersByTeam,
+      homeTeamId: editingMatchForGoals.home_team_id,
+      awayTeamId: editingMatchForGoals.away_team_id,
+      newCard: {
+        player_name: cardForm.player_name.trim(),
+        team_id: cardForm.team_id,
+        card_type: cardForm.card_type,
+      },
+    })
+    if (!cr.ok) {
+      setGoalsCardsActionError(cr.message)
+      return
+    }
+    setGoalsCardsActionError(null)
     setSaving(true)
     try {
       await api.addCard(tournamentId, editingMatchForGoals.id, {
@@ -353,6 +453,7 @@ export default function LeagueAdmin() {
       setMatchCards(cards || [])
       setSuspendedPlayersSet(new Set(suspended || []))
       setCardForm({ player_name: '', team_id: cardForm.team_id, card_type: 'yellow', suspension_dates: 1 })
+      setGoalsCardsActionError(null)
       loadAll()
     } catch (err) {
       setError(err.message)
@@ -366,6 +467,7 @@ export default function LeagueAdmin() {
       await api.deleteCard(tournamentId, cardId)
       const [cards] = await Promise.all([api.getCards(tournamentId, editingMatchForGoals.id)])
       setMatchCards(cards || [])
+      setGoalsCardsActionError(null)
       loadAll()
     } catch (err) {
       setError(err.message)
@@ -621,6 +723,24 @@ export default function LeagueAdmin() {
 
   const handleUpdateMatchScore = async (matchId, home_score, away_score, home_games, away_games) => {
     try {
+      if (tournament?.sport !== 'padel') {
+        const goals = await api.getGoals(tournamentId, matchId)
+        const m = findMatchById(matchId)
+        if (m) {
+          const r = validateMatchGoalsVsScore({
+            homeScore: home_score,
+            awayScore: away_score,
+            homeTeamId: m.home_team_id,
+            awayTeamId: m.away_team_id,
+            goals,
+          })
+          if (!r.ok) {
+            setMatchScoreInlineError({ matchId, message: r.message })
+            return
+          }
+        }
+      }
+      setMatchScoreInlineError(null)
       const payload = {
         home_score: Number(home_score),
         away_score: Number(away_score),
@@ -1035,13 +1155,14 @@ export default function LeagueAdmin() {
                                       editingMatchId={editingMatchId}
                                       matchScoreForm={matchScoreForm}
                                       setMatchScoreForm={setMatchScoreForm}
-                                      setEditingMatchId={setEditingMatchId}
+                                      setEditingMatchId={setEditingMatchIdSafe}
                                       onSaveScore={handleUpdateMatchScore}
                                       onOpenGoalsCards={openGoalsCardsModal}
                                       onOpenEditMatch={openEditMatchModal}
                                       onDeleteMatch={handleDeleteMatch}
                                       matchdayId={md.id}
                                       saving={saving}
+                                      scoreInlineError={matchScoreInlineError?.matchId === m.id ? matchScoreInlineError.message : null}
                                     />
                                   ))}
                                 </div>
@@ -1521,13 +1642,25 @@ export default function LeagueAdmin() {
           </Modal.Body>
         </Modal>
 
-        <Modal show={showGoalsCardsModal} onHide={() => { if (!saving) { setShowGoalsCardsModal(false); setEditingMatchForGoals(null); } }} size="lg">
+        <Modal show={showGoalsCardsModal} onHide={() => { if (!saving) { setShowGoalsCardsModal(false); setEditingMatchForGoals(null); setGoalsCardsActionError(null); } }} size="lg">
           <Modal.Header closeButton>
             <Modal.Title>
               Goles y tarjetas — {editingMatchForGoals?.home_team_name} vs {editingMatchForGoals?.away_team_name}
             </Modal.Title>
           </Modal.Header>
           <Modal.Body>
+            {(goalsCardsActionError || (!liveMatchEventsValidation.ok && liveMatchEventsValidation.message)) && (
+              <Alert variant="danger" className="league-match-events-validation-alert">
+                {goalsCardsActionError || liveMatchEventsValidation.message}
+              </Alert>
+            )}
+            <div
+              className={
+                !liveMatchEventsValidation.ok && liveMatchEventsValidation.affectedFields?.includes('goals')
+                  ? 'league-match-events-section league-match-events-section--conflict'
+                  : 'league-match-events-section'
+              }
+            >
             <h6 className="mt-2">Goles</h6>
             <Table size="sm" className="mb-3">
               <thead><tr><th>Jugador</th><th>Equipo</th><th>Goles</th><th></th></tr></thead>
@@ -1594,7 +1727,15 @@ export default function LeagueAdmin() {
               />
               <Button type="submit" size="sm" disabled={saving || !goalForm.player_name?.trim() || !goalForm.team_id}>Agregar gol</Button>
             </Form>
+            </div>
 
+            <div
+              className={
+                !liveMatchEventsValidation.ok && liveMatchEventsValidation.affectedFields?.includes('cards')
+                  ? 'league-match-events-section league-match-events-section--conflict'
+                  : 'league-match-events-section'
+              }
+            >
             <h6>Tarjetas</h6>
             <Table size="sm" className="mb-3">
               <thead><tr><th>Jugador</th><th>Equipo</th><th>Tipo</th><th></th></tr></thead>
@@ -1671,6 +1812,7 @@ export default function LeagueAdmin() {
               )}
               <Button type="submit" size="sm" disabled={saving || !cardForm.player_name?.trim() || !cardForm.team_id}>Agregar tarjeta</Button>
             </Form>
+            </div>
           </Modal.Body>
         </Modal>
 
