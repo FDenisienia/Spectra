@@ -2,18 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Container, Card, Table, Spinner, Alert, Button, Nav } from 'react-bootstrap'
 import * as api from '../api/league'
+import { formatMatchDateTimeArgentina } from '../utils/matchDateTime'
 import TournamentLogo from '../components/tournament/TournamentLogo'
 import '../styles/League.css'
 import '../styles/TeamDetailSlider.css'
-
-function formatDate(d) {
-  if (!d) return '—'
-  try {
-    return new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
-  } catch {
-    return d
-  }
-}
 
 const SECTIONS_ALL = [
   { key: 'players', label: 'Jugadores', icon: '👥' },
@@ -371,7 +363,7 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
                                               {item.match.is_home ? ' (en casa)' : ' (visitante)'}
                                             </p>
                                             <p className="team-detail-date-card-meta mb-0 text-muted small">
-                                              Fecha {item.match.matchday_number} · {formatDate(item.match.played_at) || 'Por definir'}
+                                              Fecha {item.match.matchday_number} · {item.match.played_at ? formatMatchDateTimeArgentina(item.match.played_at) : 'Por definir'}
                                             </p>
                                           </>
                                         )}

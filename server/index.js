@@ -23,6 +23,7 @@ import { seedAdmin } from './db/seedAdmin.js'
 import * as tournamentsRepo from './db/repo/tournaments.js'
 import * as leagueRepo from './db/repo/league.js'
 import { login, requireAuth, changePassword } from './auth.js'
+import { normalizePlayedAtForDb } from './playedAt.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -691,6 +692,20 @@ app.post('/api/tournament/:id/league/matchdays', requireAuth, async (req, res) =
   }
 })
 
+app.patch('/api/tournament/:id/league/matchdays/:matchdayId', requireAuth, async (req, res) => {
+  try {
+    const t = await tournamentsRepo.getById(req.params.id)
+    if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
+    if (!isLeagueTournament(t)) return res.status(400).json({ error: 'Torneo no es de liga' })
+    const { number } = req.body || {}
+    const matchday = await leagueRepo.updateMatchday(req.params.matchdayId, req.params.id, { number })
+    if (!matchday) return res.status(404).json({ error: 'Jornada no encontrada' })
+    res.json(matchday)
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
 app.delete('/api/tournament/:id/league/matchdays/:matchdayId', requireAuth, async (req, res) => {
   try {
     const ok = await leagueRepo.deleteMatchday(req.params.matchdayId)
@@ -715,7 +730,7 @@ app.post('/api/tournament/:id/league/matchdays/:matchdayId/matches', requireAuth
   try {
     const { home_team_id, away_team_id, played_at } = req.body || {}
     if (!home_team_id || !away_team_id) return res.status(400).json({ error: 'home_team_id y away_team_id requeridos' })
-    const match = await leagueRepo.createMatch(req.params.matchdayId, home_team_id, away_team_id, played_at || null)
+    const match = await leagueRepo.createMatch(req.params.matchdayId, home_team_id, away_team_id, normalizePlayedAtForDb(played_at))
     res.status(201).json(match)
   } catch (e) {
     res.status(400).json({ error: e.message })
@@ -724,8 +739,17 @@ app.post('/api/tournament/:id/league/matchdays/:matchdayId/matches', requireAuth
 
 app.patch('/api/tournament/:id/league/matches/:matchId', requireAuth, async (req, res) => {
   try {
-    const { home_score, away_score, home_games, away_games, played_at, status } = req.body || {}
-    const match = await leagueRepo.updateMatch(req.params.matchId, { home_score, away_score, home_games, away_games, played_at, status })
+    const { home_score, away_score, home_games, away_games, played_at, status, home_team_id, away_team_id } = req.body || {}
+    const payload = {}
+    if (home_score !== undefined) payload.home_score = home_score
+    if (away_score !== undefined) payload.away_score = away_score
+    if (home_games !== undefined) payload.home_games = home_games
+    if (away_games !== undefined) payload.away_games = away_games
+    if (played_at !== undefined) payload.played_at = normalizePlayedAtForDb(played_at)
+    if (status !== undefined) payload.status = status
+    if (home_team_id !== undefined) payload.home_team_id = home_team_id
+    if (away_team_id !== undefined) payload.away_team_id = away_team_id
+    const match = await leagueRepo.updateMatch(req.params.matchId, payload)
     if (!match) return res.status(404).json({ error: 'Partido no encontrado' })
     res.json(match)
   } catch (e) {
@@ -929,7 +953,9 @@ app.post('/api/tournament/:id/league/phase-final/generate', requireAuth, async (
 app.patch('/api/tournament/:id/league/playoff/matches/:matchId', requireAuth, async (req, res) => {
   try {
     const { home_score, away_score, status, played_at } = req.body || {}
-    const match = await leagueRepo.updatePlayoffMatch(req.params.matchId, { home_score, away_score, status, played_at })
+    const payload = { home_score, away_score, status }
+    if (played_at !== undefined) payload.played_at = normalizePlayedAtForDb(played_at)
+    const match = await leagueRepo.updatePlayoffMatch(req.params.matchId, payload)
     if (!match) return res.status(404).json({ error: 'Partido no encontrado' })
     if (status === 'played' && match.home_team_id && match.away_team_id) {
       const h = match.home_score ?? 0

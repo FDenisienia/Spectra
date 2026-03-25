@@ -192,6 +192,16 @@ export async function createMatchday(tournamentId, number) {
   return res.json()
 }
 
+export async function updateMatchday(tournamentId, matchdayId, { number }) {
+  const res = await fetch(`${base(tournamentId)}/matchdays/${matchdayId}`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ number }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
 export async function deleteMatchday(tournamentId, matchdayId) {
   const res = await fetch(`${base(tournamentId)}/matchdays/${matchdayId}`, { method: 'DELETE', headers: authHeaders() })
   if (!res.ok && res.status !== 204) throw new Error(await parseError(res))

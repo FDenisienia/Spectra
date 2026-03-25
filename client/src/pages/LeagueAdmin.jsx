@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Container, Navbar, Nav, Card, Table, Button, Spinner, Alert, Modal, Form, Tabs, Tab, Row, Col } from 'react-bootstrap'
 import * as api from '../api/league'
+import { playedAtToDatetimeLocal } from '../utils/matchDateTime'
 import * as tournamentApi from '../api/tournament'
 import { isLeagueFormat } from '../utils/tournamentFormat'
+import { LeagueFixtureMatchRow, LeaguePlayoffFixtureRow } from '../components/league/LeagueFixtureMatchRows'
 import '../styles/League.css'
 
 export default function LeagueAdmin() {
@@ -17,8 +19,11 @@ export default function LeagueAdmin() {
   const [error, setError] = useState(null)
   const [showTeamModal, setShowTeamModal] = useState(false)
   const [showMatchdayModal, setShowMatchdayModal] = useState(false)
+  const [showEditMatchdayModal, setShowEditMatchdayModal] = useState(false)
+  const [editMatchdayForm, setEditMatchdayForm] = useState({ id: '', number: 1 })
   const [showMatchModal, setShowMatchModal] = useState(false)
   const [editingMatchdayId, setEditingMatchdayId] = useState(null)
+  const [editingMatchRow, setEditingMatchRow] = useState(null)
   const [matchdayMatches, setMatchdayMatches] = useState({})
   const [teamForm, setTeamForm] = useState({ name: '', shield_url: '', zone_id: '' })
   const [matchdayNumber, setMatchdayNumber] = useState(1)
@@ -509,21 +514,31 @@ export default function LeagueAdmin() {
     }
   }
 
-  const handleAddMatch = async (e) => {
+  const handleSaveMatch = async (e) => {
     e.preventDefault()
     if (!editingMatchdayId || !matchForm.home_team_id || !matchForm.away_team_id) return
     setSaving(true)
     setError(null)
+    const mdId = editingMatchdayId
     try {
-      await api.createMatch(tournamentId, editingMatchdayId, {
-        home_team_id: matchForm.home_team_id,
-        away_team_id: matchForm.away_team_id,
-        played_at: matchForm.played_at || null,
-      })
+      if (editingMatchRow?.id) {
+        await api.updateMatch(tournamentId, editingMatchRow.id, {
+          home_team_id: matchForm.home_team_id,
+          away_team_id: matchForm.away_team_id,
+          played_at: matchForm.played_at || null,
+        })
+      } else {
+        await api.createMatch(tournamentId, mdId, {
+          home_team_id: matchForm.home_team_id,
+          away_team_id: matchForm.away_team_id,
+          played_at: matchForm.played_at || null,
+        })
+      }
       setShowMatchModal(false)
       setEditingMatchdayId(null)
+      setEditingMatchRow(null)
       setMatchForm({ zone_id: '', home_team_id: '', away_team_id: '', played_at: '' })
-      loadMatchdayMatches(editingMatchdayId)
+      loadMatchdayMatches(mdId)
       loadAll()
     } catch (err) {
       setError(err.message)
@@ -534,6 +549,7 @@ export default function LeagueAdmin() {
 
   const openMatchModal = (matchdayId) => {
     setEditingMatchdayId(matchdayId)
+    setEditingMatchRow(null)
     const firstZone = zones.length > 0 ? zones[0]?.id : ''
     const zoneTeams = zones.length > 0 ? teams.filter((t) => t.zone_id === firstZone) : teams
     setMatchForm({
@@ -543,6 +559,64 @@ export default function LeagueAdmin() {
       played_at: '',
     })
     setShowMatchModal(true)
+  }
+
+  const openEditMatchModal = (matchdayId, m) => {
+    setEditingMatchdayId(matchdayId)
+    setEditingMatchRow(m)
+    const zFromMatch = m.zone_id || ''
+    setMatchForm({
+      zone_id: zFromMatch || (zones.length > 0 ? zones[0]?.id : ''),
+      home_team_id: m.home_team_id,
+      away_team_id: m.away_team_id,
+      played_at: playedAtToDatetimeLocal(m.played_at),
+    })
+    setShowMatchModal(true)
+  }
+
+  const handleSaveEditMatchday = async (e) => {
+    e.preventDefault()
+    if (!editMatchdayForm.id) return
+    setSaving(true)
+    setError(null)
+    try {
+      await api.updateMatchday(tournamentId, editMatchdayForm.id, { number: editMatchdayForm.number })
+      setShowEditMatchdayModal(false)
+      loadAll()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteMatchday = async (md) => {
+    if (!window.confirm(`¿Eliminar la jornada ${md.number} y todos sus partidos? Esta acción no se puede deshacer.`)) return
+    setSaving(true)
+    setError(null)
+    try {
+      await api.deleteMatchday(tournamentId, md.id)
+      loadAll()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteMatch = async (matchId, matchdayId) => {
+    if (!window.confirm('¿Eliminar este partido? También se borran goles y tarjetas cargados en ese partido.')) return
+    setSaving(true)
+    setError(null)
+    try {
+      await api.deleteMatch(tournamentId, matchId)
+      loadMatchdayMatches(matchdayId)
+      loadAll()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleUpdateMatchScore = async (matchId, home_score, away_score, home_games, away_games) => {
@@ -577,15 +651,6 @@ export default function LeagueAdmin() {
       setEditingMatchId(null)
     } catch (err) {
       setError(err.message)
-    }
-  }
-
-  const formatDate = (d) => {
-    if (!d) return '—'
-    try {
-      return new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
-    } catch {
-      return d
     }
   }
 
@@ -910,11 +975,27 @@ export default function LeagueAdmin() {
                 <Card.Body>
                   {matchdays.map((md) => (
                     <Card key={md.id} className="mb-3">
-                      <Card.Header className="d-flex justify-content-between align-items-center">
+                      <Card.Header className="d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <span>Jornada {md.number}</span>
-                        <Button size="sm" variant="outline-primary" onClick={() => openMatchModal(md.id)}>
-                          Agregar partido
-                        </Button>
+                        <div className="d-flex flex-wrap gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            disabled={saving}
+                            onClick={() => {
+                              setEditMatchdayForm({ id: md.id, number: md.number })
+                              setShowEditMatchdayModal(true)
+                            }}
+                          >
+                            Editar jornada
+                          </Button>
+                          <Button size="sm" variant="outline-danger" disabled={saving} onClick={() => handleDeleteMatchday(md)}>
+                            Eliminar jornada
+                          </Button>
+                          <Button size="sm" variant="outline-primary" onClick={() => openMatchModal(md.id)}>
+                            Agregar partido
+                          </Button>
+                        </div>
                       </Card.Header>
                       <Card.Body className="p-0">
                         {(() => {
@@ -926,93 +1007,45 @@ export default function LeagueAdmin() {
                             groups.push({ zone: null, matches: allMatches })
                           }
                           return groups.map(({ zone, matches: zoneMatches }) => (
-                            <div key={zone?.id || '_all'} className={zone ? 'mb-3' : ''}>
+                            <div
+                              key={zone?.id || '_all'}
+                              className={zone ? 'league-match-group mb-3' : 'league-match-group league-match-group--bare mb-0'}
+                            >
                               {zone && (
-                                <div className="px-3 py-2 bg-light border-bottom small fw-semibold">{zone.name}</div>
+                                <div className="league-match-group__header">
+                                  <h3 className="league-match-group__title">{zone.name}</h3>
+                                </div>
                               )}
-                              <Table responsive className="mb-0">
-                                <thead className="table-light">
-                                  <tr><th className="text-end">Local</th><th className="text-center">Resultado</th><th>Visitante</th><th>Fecha</th><th></th></tr>
-                                </thead>
-                                <tbody>
+                              <div className="league-match-group__body">
+                                <div className="league-match-head d-none d-md-grid">
+                                  <span className="league-match-head__cell league-match-head__cell--home">Local</span>
+                                  <span className="league-match-head__cell league-match-head__cell--score">Resultado</span>
+                                  <span className="league-match-head__cell league-match-head__cell--away">Visitante</span>
+                                  <span className="league-match-head__cell league-match-head__cell--date">Fecha</span>
+                                  <span className="league-match-head__cell league-match-head__cell--actions">Acciones</span>
+                                </div>
+                                <div className="league-match-list">
                                   {zoneMatches.map((m) => (
-                              <tr key={m.id}>
-                                <td className="text-end">{m.home_team_name}</td>
-                                <td className="text-center">
-                                  {editingMatchId === m.id ? (
-                                    <span className="d-inline-flex flex-wrap align-items-center gap-1">
-                                      <span title={isPadel ? 'Sets' : 'Resultado'}>
-                                        <Form.Control
-                                          type="number"
-                                          size="sm"
-                                          style={{ width: 50 }}
-                                          value={matchScoreForm.home_score}
-                                          onChange={(e) => setMatchScoreForm((f) => ({ ...f, home_score: e.target.value }))}
-                                        />
-                                        -
-                                        <Form.Control
-                                          type="number"
-                                          size="sm"
-                                          style={{ width: 50 }}
-                                          value={matchScoreForm.away_score}
-                                          onChange={(e) => setMatchScoreForm((f) => ({ ...f, away_score: e.target.value }))}
-                                        />
-                                      </span>
-                                      {isPadel && (
-                                        <span title="Games" className="text-muted small">
-                                          (
-                                          <Form.Control
-                                            type="number"
-                                            size="sm"
-                                            style={{ width: 45 }}
-                                            placeholder="G"
-                                            value={matchScoreForm.home_games}
-                                            onChange={(e) => setMatchScoreForm((f) => ({ ...f, home_games: e.target.value }))}
-                                          />
-                                          -
-                                          <Form.Control
-                                            type="number"
-                                            size="sm"
-                                            style={{ width: 45 }}
-                                            placeholder="G"
-                                            value={matchScoreForm.away_games}
-                                            onChange={(e) => setMatchScoreForm((f) => ({ ...f, away_games: e.target.value }))}
-                                          />
-                                          )
-                                        </span>
-                                      )}
-                                      <Button size="sm" onClick={() => handleUpdateMatchScore(m.id, matchScoreForm.home_score, matchScoreForm.away_score, matchScoreForm.home_games, matchScoreForm.away_games)}>Guardar</Button>
-                                      <Button size="sm" variant="outline-secondary" onClick={() => setEditingMatchId(null)}>Cancelar</Button>
-                                    </span>
-                                  ) : m.status === 'played' ? (
-                                    <span>
-                                      {m.home_score ?? 0} - {m.away_score ?? 0}
-                                      {isPadel && m.home_games != null && m.away_games != null && (
-                                        <span className="text-muted small ms-1">({m.home_games}-{m.away_games})</span>
-                                      )}
-                                      <Button variant="link" size="sm" className="p-0 ms-1" onClick={() => { setEditingMatchId(m.id); setMatchScoreForm({ home_score: m.home_score ?? '', away_score: m.away_score ?? '', home_games: m.home_games ?? '', away_games: m.away_games ?? '' }); }}>
-                                        Editar
-                                      </Button>
-                                    </span>
-                                  ) : (
-                                    <Button size="sm" variant="outline-secondary" onClick={() => { setEditingMatchId(m.id); setMatchScoreForm({ home_score: '', away_score: '', home_games: '', away_games: '' }); }}>
-                                      Cargar resultado
-                                    </Button>
-                                  )}
-                                </td>
-                                <td>{m.away_team_name}</td>
-                                <td className="text-muted small">{formatDate(m.played_at)}</td>
-                                <td>
-                                  {!isPadel && (
-                                  <Button variant="link" size="sm" className="p-0" onClick={() => openGoalsCardsModal(m)}>
-                                    Goles y tarjetas
-                                  </Button>
-                                  )}
-                                </td>
-                              </tr>
+                                    <LeagueFixtureMatchRow
+                                      key={m.id}
+                                      match={m}
+                                      homeLabel={m.home_team_name}
+                                      awayLabel={m.away_team_name}
+                                      isPadel={isPadel}
+                                      editingMatchId={editingMatchId}
+                                      matchScoreForm={matchScoreForm}
+                                      setMatchScoreForm={setMatchScoreForm}
+                                      setEditingMatchId={setEditingMatchId}
+                                      onSaveScore={handleUpdateMatchScore}
+                                      onOpenGoalsCards={openGoalsCardsModal}
+                                      onOpenEditMatch={openEditMatchModal}
+                                      onDeleteMatch={handleDeleteMatch}
+                                      matchdayId={md.id}
+                                      saving={saving}
+                                    />
                                   ))}
-                                </tbody>
-                              </Table>
+                                </div>
+                              </div>
                             </div>
                           ))
                         })()}
@@ -1162,7 +1195,7 @@ export default function LeagueAdmin() {
                       <Card key={groupType} className="mb-4">
                         <Card.Header className="fw-bold">{groupLabel}</Card.Header>
                         <Card.Body>
-                          <h6 className="mb-2">Tabla</h6>
+                          <h6 className="league-section-title">Tabla</h6>
                           {groupStandings.length === 0 ? (
                             <p className="text-muted small">Sin partidos jugados aún.</p>
                           ) : (
@@ -1188,42 +1221,34 @@ export default function LeagueAdmin() {
                               </tbody>
                             </Table>
                           )}
-                          <h6 className="mb-2">Partidos</h6>
+                          <h6 className="league-section-title">Partidos</h6>
                           {groupRounds.map((round) => (
                             <div key={round.id} className="mb-3">
-                              <div className="small fw-semibold text-muted mb-1">{round.name}</div>
-                              <Table responsive size="sm" className="mb-0">
-                                <thead className="table-light">
-                                  <tr><th className="text-end">Local</th><th className="text-center">Resultado</th><th>Visitante</th><th></th></tr>
-                                </thead>
-                                <tbody>
+                              <div className="league-match-round-label">{round.name}</div>
+                              <div className="league-match-group mb-0">
+                              <div className="league-match-group__body">
+                                <div className="league-match-head league-match-head--playoff d-none d-md-grid">
+                                  <span className="league-match-head__cell league-match-head__cell--home">Local</span>
+                                  <span className="league-match-head__cell league-match-head__cell--score">Resultado</span>
+                                  <span className="league-match-head__cell league-match-head__cell--away">Visitante</span>
+                                </div>
+                                <div className="league-match-list">
                                   {(round.matches || []).map((m) => (
-                                    <tr key={m.id}>
-                                      <td className="text-end">{m.home_team_name || '—'}</td>
-                                      <td className="text-center">
-                                        {editingPlayoffMatchId === m.id ? (
-                                          <span className="d-inline-flex align-items-center gap-1">
-                                            <Form.Control type="number" size="sm" style={{ width: 50 }} value={matchScoreForm.home_score} onChange={(e) => setMatchScoreForm((f) => ({ ...f, home_score: e.target.value }))} />
-                                            -
-                                            <Form.Control type="number" size="sm" style={{ width: 50 }} value={matchScoreForm.away_score} onChange={(e) => setMatchScoreForm((f) => ({ ...f, away_score: e.target.value }))} />
-                                            <Button size="sm" onClick={() => handleUpdatePlayoffScore(m.id, matchScoreForm.home_score, matchScoreForm.away_score)}>Guardar</Button>
-                                            <Button size="sm" variant="outline-secondary" onClick={() => setEditingPlayoffMatchId(null)}>Cancelar</Button>
-                                          </span>
-                                        ) : m.status === 'played' ? (
-                                          <span>
-                                            {m.home_score ?? 0} - {m.away_score ?? 0}
-                                            <Button variant="link" size="sm" className="p-0 ms-1" onClick={() => { setEditingPlayoffMatchId(m.id); setMatchScoreForm({ home_score: m.home_score ?? '', away_score: m.away_score ?? '' }); }}>Editar</Button>
-                                          </span>
-                                        ) : (
-                                          <Button size="sm" variant="outline-secondary" onClick={() => { setEditingPlayoffMatchId(m.id); setMatchScoreForm({ home_score: '', away_score: '' }); }}>Cargar resultado</Button>
-                                        )}
-                                      </td>
-                                      <td>{m.away_team_name || '—'}</td>
-                                      <td></td>
-                                    </tr>
+                                    <LeaguePlayoffFixtureRow
+                                      key={m.id}
+                                      match={m}
+                                      homeLabel={m.home_team_name || 'Sin definir'}
+                                      awayLabel={m.away_team_name || 'Sin definir'}
+                                      editingPlayoffMatchId={editingPlayoffMatchId}
+                                      matchScoreForm={matchScoreForm}
+                                      setMatchScoreForm={setMatchScoreForm}
+                                      setEditingPlayoffMatchId={setEditingPlayoffMatchId}
+                                      onSavePlayoffScore={handleUpdatePlayoffScore}
+                                    />
                                   ))}
-                                </tbody>
-                              </Table>
+                                </div>
+                              </div>
+                              </div>
                             </div>
                           ))}
                         </Card.Body>
@@ -1248,54 +1273,30 @@ export default function LeagueAdmin() {
                   <Card key={round.id} className="mb-3">
                     <Card.Header className="fw-bold">{round.name}</Card.Header>
                     <Card.Body className="p-0">
-                      <Table responsive className="mb-0">
-                        <thead className="table-light">
-                          <tr><th className="text-end">Local</th><th className="text-center">Resultado</th><th>Visitante</th><th></th></tr>
-                        </thead>
-                        <tbody>
-                          {(round.matches || []).map((m) => (
-                            <tr key={m.id}>
-                              <td className="text-end">{m.home_team_name || m.home_slot || '—'}</td>
-                              <td className="text-center">
-                                {editingPlayoffMatchId === m.id ? (
-                                  <span className="d-inline-flex align-items-center gap-1">
-                                    <Form.Control
-                                      type="number"
-                                      size="sm"
-                                      style={{ width: 50 }}
-                                      value={matchScoreForm.home_score}
-                                      onChange={(e) => setMatchScoreForm((f) => ({ ...f, home_score: e.target.value }))}
-                                    />
-                                    -
-                                    <Form.Control
-                                      type="number"
-                                      size="sm"
-                                      style={{ width: 50 }}
-                                      value={matchScoreForm.away_score}
-                                      onChange={(e) => setMatchScoreForm((f) => ({ ...f, away_score: e.target.value }))}
-                                    />
-                                    <Button size="sm" onClick={() => handleUpdatePlayoffScore(m.id, matchScoreForm.home_score, matchScoreForm.away_score)}>Guardar</Button>
-                                    <Button size="sm" variant="outline-secondary" onClick={() => setEditingPlayoffMatchId(null)}>Cancelar</Button>
-                                  </span>
-                                ) : m.status === 'played' ? (
-                                  <span>
-                                    {m.home_score ?? 0} - {m.away_score ?? 0}
-                                    <Button variant="link" size="sm" className="p-0 ms-1" onClick={() => { setEditingPlayoffMatchId(m.id); setMatchScoreForm({ home_score: m.home_score ?? '', away_score: m.away_score ?? '' }); }}>
-                                      Editar
-                                    </Button>
-                                  </span>
-                                ) : (
-                                  <Button size="sm" variant="outline-secondary" onClick={() => { setEditingPlayoffMatchId(m.id); setMatchScoreForm({ home_score: '', away_score: '' }); }}>
-                                    Cargar resultado
-                                  </Button>
-                                )}
-                              </td>
-                              <td>{m.away_team_name || m.away_slot || '—'}</td>
-                              <td></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
+                      <div className="league-match-group league-match-group--bare">
+                        <div className="league-match-group__body">
+                          <div className="league-match-head league-match-head--playoff d-none d-md-grid">
+                            <span className="league-match-head__cell league-match-head__cell--home">Local</span>
+                            <span className="league-match-head__cell league-match-head__cell--score">Resultado</span>
+                            <span className="league-match-head__cell league-match-head__cell--away">Visitante</span>
+                          </div>
+                          <div className="league-match-list">
+                            {(round.matches || []).map((m) => (
+                              <LeaguePlayoffFixtureRow
+                                key={m.id}
+                                match={m}
+                                homeLabel={m.home_team_name || m.home_slot || 'Sin definir'}
+                                awayLabel={m.away_team_name || m.away_slot || 'Sin definir'}
+                                editingPlayoffMatchId={editingPlayoffMatchId}
+                                matchScoreForm={matchScoreForm}
+                                setMatchScoreForm={setMatchScoreForm}
+                                setEditingPlayoffMatchId={setEditingPlayoffMatchId}
+                                onSavePlayoffScore={handleUpdatePlayoffScore}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </Card.Body>
                   </Card>
                 ))
@@ -1709,9 +1710,31 @@ export default function LeagueAdmin() {
           </Form>
         </Modal>
 
-        <Modal show={showMatchModal} onHide={() => !saving && setShowMatchModal(false)}>
-          <Modal.Header closeButton><Modal.Title>Nuevo partido</Modal.Title></Modal.Header>
-          <Form onSubmit={handleAddMatch}>
+        <Modal show={showEditMatchdayModal} onHide={() => !saving && setShowEditMatchdayModal(false)}>
+          <Modal.Header closeButton><Modal.Title>Editar jornada</Modal.Title></Modal.Header>
+          <Form onSubmit={handleSaveEditMatchday}>
+            <Modal.Body>
+              <Form.Group>
+                <Form.Label>Número de jornada</Form.Label>
+                <Form.Control
+                  type="number"
+                  min={1}
+                  value={editMatchdayForm.number}
+                  onChange={(e) => setEditMatchdayForm((f) => ({ ...f, number: Number(e.target.value) || 1 }))}
+                />
+                <Form.Text className="text-muted">Debe ser único en el torneo (no puede repetirse con otra jornada).</Form.Text>
+              </Form.Group>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={() => setShowEditMatchdayModal(false)} disabled={saving}>Cancelar</Button>
+              <Button type="submit" disabled={saving}>{saving ? 'Guardando…' : 'Guardar'}</Button>
+            </Modal.Footer>
+          </Form>
+        </Modal>
+
+        <Modal show={showMatchModal} onHide={() => { if (!saving) { setShowMatchModal(false); setEditingMatchRow(null) } }}>
+          <Modal.Header closeButton><Modal.Title>{editingMatchRow ? 'Editar partido' : 'Nuevo partido'}</Modal.Title></Modal.Header>
+          <Form onSubmit={handleSaveMatch}>
             <Modal.Body>
               {zones.length > 0 && (
                 <Form.Group className="mb-3">
@@ -1762,11 +1785,17 @@ export default function LeagueAdmin() {
               <Form.Group className="mb-3">
                 <Form.Label>Fecha y hora (opcional)</Form.Label>
                 <Form.Control type="datetime-local" value={matchForm.played_at} onChange={(e) => setMatchForm((f) => ({ ...f, played_at: e.target.value }))} />
+                <Form.Text className="text-muted">Horario en hora Argentina (la que elegís es la que se guarda y muestra).</Form.Text>
               </Form.Group>
+              {editingMatchRow && (
+                <p className="small text-muted mb-0">
+                  Si cambiás local o visitante, se borran goles y tarjetas de este partido y el resultado vuelve a pendiente.
+                </p>
+              )}
             </Modal.Body>
             <Modal.Footer>
-              <Button variant="secondary" onClick={() => setShowMatchModal(false)} disabled={saving}>Cancelar</Button>
-              <Button type="submit" disabled={saving || !matchForm.home_team_id || !matchForm.away_team_id || (zones.length > 0 && !matchForm.zone_id)}>{saving ? 'Guardando…' : 'Agregar'}</Button>
+              <Button variant="secondary" onClick={() => { if (!saving) { setShowMatchModal(false); setEditingMatchRow(null) } }} disabled={saving}>Cancelar</Button>
+              <Button type="submit" disabled={saving || !matchForm.home_team_id || !matchForm.away_team_id || (zones.length > 0 && !matchForm.zone_id)}>{saving ? 'Guardando…' : editingMatchRow ? 'Guardar' : 'Agregar'}</Button>
             </Modal.Footer>
           </Form>
         </Modal>

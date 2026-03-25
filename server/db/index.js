@@ -24,6 +24,8 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   charset: 'utf8mb4',
+  // Evita que DATETIME se convierta a Date JS y luego a ISO con Z (UTC) en JSON.
+  dateStrings: true,
 })
 
 /** Asegura que la base existe y el esquema (tablas e índices). */

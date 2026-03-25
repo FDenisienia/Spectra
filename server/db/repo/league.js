@@ -351,6 +351,20 @@ export async function deleteMatchday(matchdayId) {
   return r.affectedRows > 0
 }
 
+export async function updateMatchday(matchdayId, tournamentId, { number }) {
+  if (number === undefined || number === null) return null
+  const [rows] = await pool.query('SELECT id, tournament_id, number FROM league_matchdays WHERE id = ?', [matchdayId])
+  if (!rows[0] || rows[0].tournament_id !== tournamentId) return null
+  const [dups] = await pool.query(
+    'SELECT id FROM league_matchdays WHERE tournament_id = ? AND number = ? AND id != ?',
+    [tournamentId, number, matchdayId]
+  )
+  if (dups.length) throw new Error('Ya existe otra jornada con ese número')
+  await pool.query('UPDATE league_matchdays SET number = ? WHERE id = ?', [number, matchdayId])
+  const [out] = await pool.query('SELECT id, tournament_id, number FROM league_matchdays WHERE id = ?', [matchdayId])
+  return out[0] || null
+}
+
 function roundRobinRounds(teamIds) {
   const n = teamIds.length
   const numRounds = n % 2 === 0 ? n - 1 : n
@@ -526,7 +540,79 @@ export async function createMatch(matchdayId, home_team_id, away_team_id, played
   return rows[0] || null
 }
 
+async function getMatchWithNames(matchId) {
+  const [rows] = await pool.query(
+    `SELECT m.id, m.matchday_id, m.zone_id, m.home_team_id, m.away_team_id, m.home_score, m.away_score, m.home_games, m.away_games, m.played_at, m.status,
+      ht.name AS home_team_name, ht.shield_url AS home_shield,
+      at.name AS away_team_name, at.shield_url AS away_shield,
+      z.name AS zone_name
+     FROM league_matches m
+     JOIN league_teams ht ON m.home_team_id = ht.id
+     JOIN league_teams at ON m.away_team_id = at.id
+     LEFT JOIN league_zones z ON m.zone_id = z.id
+     WHERE m.id = ?`,
+    [matchId]
+  )
+  const r = rows[0]
+  if (!r) return null
+  return {
+    id: r.id,
+    matchday_id: r.matchday_id,
+    zone_id: r.zone_id,
+    zone_name: r.zone_name,
+    home_team_id: r.home_team_id,
+    away_team_id: r.away_team_id,
+    home_score: r.home_score,
+    away_score: r.away_score,
+    home_games: r.home_games,
+    away_games: r.away_games,
+    played_at: r.played_at,
+    status: r.status,
+    home_team_name: r.home_team_name,
+    away_team_name: r.away_team_name,
+    home_shield: r.home_shield,
+    away_shield: r.away_shield,
+  }
+}
+
 export async function updateMatch(matchId, data) {
+  const [existingRows] = await pool.query(
+    `SELECT m.id, m.home_team_id, m.away_team_id, m.zone_id, m.status, md.tournament_id
+     FROM league_matches m JOIN league_matchdays md ON m.matchday_id = md.id WHERE m.id = ?`,
+    [matchId]
+  )
+  const ex = existingRows[0]
+  if (!ex) return null
+
+  const nextHome = data.home_team_id !== undefined ? data.home_team_id : ex.home_team_id
+  const nextAway = data.away_team_id !== undefined ? data.away_team_id : ex.away_team_id
+  const teamsChanged =
+    (data.home_team_id !== undefined && data.home_team_id !== ex.home_team_id) ||
+    (data.away_team_id !== undefined && data.away_team_id !== ex.away_team_id)
+
+  if (teamsChanged) {
+    const [[hr], [ar]] = await Promise.all([
+      pool.query('SELECT zone_id FROM league_teams WHERE id = ?', [nextHome]),
+      pool.query('SELECT zone_id FROM league_teams WHERE id = ?', [nextAway]),
+    ])
+    const homeZone = hr?.[0]?.zone_id ?? null
+    const awayZone = ar?.[0]?.zone_id ?? null
+    if ((homeZone || awayZone) && homeZone !== awayZone) {
+      throw new Error('Los dos equipos deben ser de la misma zona.')
+    }
+    const nextZone = homeZone ?? awayZone
+    await pool.query('DELETE FROM league_goals WHERE match_id = ?', [matchId])
+    await pool.query('DELETE FROM league_cards WHERE match_id = ?', [matchId])
+    data.home_team_id = nextHome
+    data.away_team_id = nextAway
+    data.zone_id = nextZone
+    data.home_score = null
+    data.away_score = null
+    data.home_games = null
+    data.away_games = null
+    data.status = 'scheduled'
+  }
+
   let tournamentId = null
   let homeTeamId = null
   let awayTeamId = null
@@ -545,6 +631,18 @@ export async function updateMatch(matchId, data) {
 
   const updates = []
   const params = []
+  if (data.home_team_id !== undefined) {
+    updates.push('home_team_id = ?')
+    params.push(data.home_team_id)
+  }
+  if (data.away_team_id !== undefined) {
+    updates.push('away_team_id = ?')
+    params.push(data.away_team_id)
+  }
+  if (data.zone_id !== undefined) {
+    updates.push('zone_id = ?')
+    params.push(data.zone_id)
+  }
   if (data.home_score !== undefined) {
     updates.push('home_score = ?')
     params.push(data.home_score)
@@ -569,7 +667,7 @@ export async function updateMatch(matchId, data) {
     updates.push('status = ?')
     params.push(data.status)
   }
-  if (updates.length === 0) return null
+  if (updates.length === 0) return getMatchWithNames(matchId)
   params.push(matchId)
   await pool.query(`UPDATE league_matches SET ${updates.join(', ')} WHERE id = ?`, params)
 
@@ -578,12 +676,7 @@ export async function updateMatch(matchId, data) {
     await incrementSuspensionDatesForTeam(tournamentId, awayTeamId, { excludeFromMatchId: matchId })
   }
 
-  const [rows] = await pool.query(
-    `SELECT m.id, m.matchday_id, m.home_team_id, m.away_team_id, m.home_score, m.away_score, m.played_at, m.status
-     FROM league_matches m WHERE m.id = ?`,
-    [matchId]
-  )
-  return rows[0] || null
+  return getMatchWithNames(matchId)
 }
 
 export async function deleteMatch(matchId) {
