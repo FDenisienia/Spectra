@@ -237,26 +237,6 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   box-shadow: var(--sidebar-shadow);
 }
 
-.spectra-sidebar-link .spectra-nav-icon {
-  font-size: 1.05rem;
-  opacity: 0.9;
-}
-
-.spectra-sidebar-admin {
-  flex-shrink: 0;
-  color: var(--sidebar-fg-muted) !important;
-  font-size: 0.85rem;
-  font-weight: 500;
-  margin-top: auto;
-  padding-top: 1rem !important;
-  border-top: 1px solid var(--sidebar-border);
-}
-
-.spectra-sidebar-admin:hover {
-  color: var(--sidebar-fg) !important;
-  background: var(--sidebar-surface-hover) !important;
-}
-
 /* --- Secciones / Acordeones (área interna scrolleable) --- */
 .spectra-sidebar-sections {
   flex: 1;

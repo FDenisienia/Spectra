@@ -246,12 +246,6 @@ export default function PublicLayout() {
             </Accordion>
           )}
         </div>
-        {!isHome && (
-          <Nav.Link as={Link} to="/admin" className="spectra-sidebar-link spectra-sidebar-admin mt-auto" onClick={() => setSidebarOpen(false)}>
-            <span className="spectra-nav-icon">⚙</span>
-            <span>Administración</span>
-          </Nav.Link>
-        )}
       </Nav>
     </>
   )
