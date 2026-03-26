@@ -1,6 +1,9 @@
+import { lazy, Suspense } from 'react'
 import { Container } from 'react-bootstrap'
-import GallerySection from '../components/gallery/GallerySection'
-import SponsorsCarousel from '../components/SponsorsCarousel'
+import { useInView } from '../hooks/useInView'
+
+const GallerySection = lazy(() => import('../components/gallery/GallerySection'))
+const SponsorsCarousel = lazy(() => import('../components/SponsorsCarousel'))
 
 const HERO_TITLE = 'Spectra Producciones'
 
@@ -50,8 +53,26 @@ Nuestro objetivo es simple: que cada jugador, equipo y persona que forme parte d
 
 Porque para nosotros, los torneos no se juegan solamente… se viven.`
 
+const revealRoot = { rootMargin: '0px 0px -10% 0px' }
+
+function BelowFoldFallback() {
+  return (
+    <div className="landing-below-fold-fallback" aria-hidden>
+      <div className="landing-below-fold-fallback__inner" />
+    </div>
+  )
+}
+
+function landingRevealClass(visible) {
+  return visible ? 'landing-reveal landing-reveal--visible' : 'landing-reveal'
+}
+
 export default function PublicHome() {
   const paragraphs = HERO_DESCRIPTION.split(/\n\n+/).filter((p) => p.trim())
+  const [venuesRef, venuesVisible] = useInView(revealRoot)
+  const [galleryRef, galleryVisible] = useInView(revealRoot)
+  const [sponsorsRef, sponsorsVisible] = useInView(revealRoot)
+  const [footerRef, footerVisible] = useInView({ rootMargin: '0px 0px -5% 0px' })
 
   return (
     <div className="landing-page home-page">
@@ -67,7 +88,10 @@ export default function PublicHome() {
           </Container>
         </section>
 
-        <section className="home-venues-section">
+        <section
+          ref={venuesRef}
+          className={`home-venues-section ${landingRevealClass(venuesVisible)}`}
+        >
           <Container fluid className="home-venues-container px-3 px-md-4">
             <h2 className="home-section-title">Ubicaciones / Sedes</h2>
             <div className="home-venues-grid">
@@ -100,11 +124,17 @@ export default function PublicHome() {
           </Container>
         </section>
 
-        <GallerySection />
-        <SponsorsCarousel />
+        <Suspense fallback={<BelowFoldFallback />}>
+          <div ref={galleryRef} className={landingRevealClass(galleryVisible)}>
+            <GallerySection />
+          </div>
+          <div ref={sponsorsRef} className={landingRevealClass(sponsorsVisible)}>
+            <SponsorsCarousel />
+          </div>
+        </Suspense>
       </div>
 
-      <footer className="landing-footer mt-auto">
+      <footer ref={footerRef} className={`landing-footer mt-auto ${landingRevealClass(footerVisible)}`}>
         <Container className="text-center landing-footer-inner">
           <small>Spectra Producciones © {new Date().getFullYear()}</small>
         </Container>

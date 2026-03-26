@@ -549,8 +549,9 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
 
 .spectra-topbar-spacer { width: 2.5rem; }
 
-/* Ícono Instagram en header */
-.spectra-instagram-link {
+/* Ícono Instagram en header (y botón del desplegable) */
+.spectra-instagram-link,
+.spectra-instagram-toggle.spectra-instagram-link {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -562,13 +563,27 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
 }
 
-.spectra-instagram-link:hover {
+.spectra-instagram-toggle.spectra-instagram-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.spectra-instagram-toggle.spectra-instagram-link::after {
+  display: none !important;
+}
+
+.spectra-instagram-link:hover,
+.spectra-instagram-toggle.spectra-instagram-link:hover,
+.spectra-instagram-toggle.spectra-instagram-link.show {
   opacity: 0.8;
   transform: scale(1.05);
   color: var(--sidebar-fg, #0f0f0f) !important;
 }
 
-.spectra-instagram-sidebar {
+.spectra-instagram-dropdown.spectra-instagram-sidebar {
   position: absolute;
   right: 0.75rem;
   top: 50%;
@@ -576,8 +591,166 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   z-index: 1;
 }
 
-.spectra-instagram-sidebar:hover {
+.spectra-instagram-dropdown.spectra-instagram-sidebar:hover,
+.spectra-instagram-dropdown.spectra-instagram-sidebar:has(.show) {
   transform: translateY(-50%) scale(1.05);
+}
+
+.spectra-instagram-dropdown.spectra-instagram-sidebar .spectra-instagram-toggle.spectra-instagram-link:hover,
+.spectra-instagram-dropdown.spectra-instagram-sidebar .spectra-instagram-toggle.spectra-instagram-link.show {
+  transform: none;
+}
+
+/* Solo opacidad: Popper posiciona el menú con `transform`; animar transform aquí rompía el offset */
+@keyframes spectraIgMenuPop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes spectraIgItemIn {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* El panel del menú debe dibujarse por encima del círculo del FAB (el toggle no puede tener z-index mayor que el menú) */
+.spectra-instagram-dropdown .dropdown-menu.spectra-instagram-menu {
+  --spectra-ig-menu-bg: #fff;
+  --spectra-ig-menu-border: rgba(15, 15, 15, 0.08);
+  min-width: 15.5rem;
+  padding: 0.5rem;
+  border-radius: 14px;
+  border: 1px solid var(--spectra-ig-menu-border);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.06),
+    0 12px 28px -4px rgba(0, 0, 0, 0.14);
+  z-index: 1100;
+  overflow: hidden;
+  background: var(--spectra-ig-menu-bg);
+}
+
+.spectra-instagram-dropdown .dropdown-menu.spectra-instagram-menu.show {
+  animation: spectraIgMenuPop 0.28s ease-out both;
+}
+
+.spectra-ig-menu-header.dropdown-header {
+  padding: 0.5rem 0.75rem 0.35rem;
+  margin-bottom: 0;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(15, 15, 15, 0.45);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.spectra-instagram-menu .spectra-ig-item.dropdown-item {
+  border-radius: 10px;
+  padding: 0;
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+  color: #1a1a1a;
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+.spectra-instagram-menu .spectra-ig-item.dropdown-item:first-of-type {
+  margin-top: 0.35rem;
+}
+
+.spectra-instagram-menu .spectra-ig-item .spectra-ig-item-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.spectra-instagram-menu .spectra-ig-item .spectra-ig-item-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.spectra-instagram-menu .spectra-ig-sport {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(15, 15, 15, 0.45);
+  line-height: 1.2;
+}
+
+.spectra-instagram-menu .spectra-ig-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.spectra-instagram-menu .spectra-ig-external-icon {
+  flex-shrink: 0;
+  color: rgba(15, 15, 15, 0.28);
+  transition: color 0.18s ease, transform 0.2s ease;
+}
+
+.spectra-instagram-menu .spectra-ig-item.dropdown-item:hover {
+  background: linear-gradient(135deg, rgba(131, 58, 180, 0.06) 0%, rgba(247, 119, 55, 0.06) 100%);
+  color: #1a1a1a;
+}
+
+.spectra-instagram-menu .spectra-ig-item.dropdown-item:hover .spectra-ig-external-icon {
+  color: #c13584;
+  transform: translate(2px, -2px);
+}
+
+.spectra-instagram-menu .spectra-ig-item.dropdown-item:focus-visible {
+  outline: 2px solid rgba(131, 58, 180, 0.45);
+  outline-offset: 2px;
+}
+
+.spectra-instagram-menu .spectra-ig-item.dropdown-item:active {
+  background: rgba(0, 0, 0, 0.05);
+  color: inherit;
+}
+
+.spectra-instagram-menu.show .spectra-ig-item.dropdown-item {
+  animation: spectraIgItemIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.spectra-instagram-menu.show .spectra-ig-item.dropdown-item:nth-child(2) {
+  animation-delay: 0.04s;
+}
+
+.spectra-instagram-menu.show .spectra-ig-item.dropdown-item:nth-child(3) {
+  animation-delay: 0.09s;
+}
+
+.spectra-instagram-menu.show .spectra-ig-item.dropdown-item:nth-child(4) {
+  animation-delay: 0.14s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spectra-instagram-dropdown .dropdown-menu.spectra-instagram-menu.show {
+    animation: none;
+  }
+
+  .spectra-instagram-menu.show .spectra-ig-item.dropdown-item {
+    animation: none;
+  }
+
+  .spectra-instagram-menu .spectra-ig-item.dropdown-item:hover .spectra-ig-external-icon {
+    transform: none;
+  }
 }
 
 .spectra-instagram-topbar {
@@ -598,7 +771,8 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   z-index: 1020;
 }
 
-.spectra-instagram-float {
+.spectra-instagram-float,
+.spectra-instagram-toggle.spectra-instagram-float {
   width: 56px;
   height: 56px;
   display: flex;
@@ -612,13 +786,27 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
-.spectra-instagram-float:hover {
+.spectra-instagram-toggle.spectra-instagram-float {
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.spectra-instagram-toggle.spectra-instagram-float::after {
+  display: none !important;
+}
+
+.spectra-instagram-float:hover,
+.spectra-instagram-toggle.spectra-instagram-float:hover,
+.spectra-instagram-toggle.spectra-instagram-float.show {
   transform: scale(1.08);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   color: #0f0f0f;
 }
 
-.spectra-instagram-float:active {
+.spectra-instagram-float:active,
+.spectra-instagram-toggle.spectra-instagram-float:active {
   transform: scale(0.98);
 }
 
@@ -752,6 +940,90 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   }
 }
 
+/* ========== Home (PublicHome) — animaciones landing (sutiles, IO + CSS) ========== */
+@keyframes landingHeroIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.landing-page .home-hero {
+  animation: landingHeroIn 0.65s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
+/* Secciones al scroll: fade + translateY */
+.landing-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.45s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.45s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.landing-reveal--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Skeleton mientras carga galería / sponsors (lazy) */
+.landing-below-fold-fallback {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  background: #fff;
+  border-top: 1px solid #eee;
+}
+
+.landing-below-fold-fallback__inner {
+  width: min(100%, 360px);
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #eee 0%, #f5f5f5 50%, #eee 100%);
+  background-size: 200% 100%;
+  animation: landingSkeletonShimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes landingSkeletonShimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-page .home-hero {
+    animation: none;
+  }
+
+  .landing-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .landing-below-fold-fallback__inner {
+    animation: none;
+    background: #eee;
+  }
+
+  .home-venue-card:hover {
+    transform: none;
+  }
+
+  .gallery-sport-card:hover {
+    transform: none;
+  }
+}
+
 /* ========== Home (PublicHome) — Hero, Galería, Sponsors ========== */
 .home-loading {
   display: flex;
@@ -881,13 +1153,17 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   text-decoration: none;
   color: inherit;
   overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.28s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.28s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.28s cubic-bezier(0.25, 0.1, 0.25, 1);
   cursor: pointer;
 }
 
 .home-venue-card:hover {
   border-color: #999;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
+  transform: translateY(-3px) scale(1.01);
 }
 
 .home-venue-map-wrap {
@@ -1206,12 +1482,14 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
   border-radius: 16px;
   overflow: hidden;
   background: #1a1a1a;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition:
+    transform 0.32s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.32s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .gallery-sport-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  transform: translateY(-5px) scale(1.015);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.22);
 }
 
 .gallery-sport-card-bg {
@@ -1386,6 +1664,50 @@ h3, .h3, .card-header { font-size: 1rem; font-weight: 600; color: #334155; }
 
 .gallery-grid-item:hover .gallery-grid-item-overlay {
   opacity: 1;
+}
+
+/* Celda final «Ver más» (misma cuadrícula, enlace a Drive) */
+a.gallery-grid-item--more {
+  cursor: pointer;
+  text-decoration: none;
+  background: linear-gradient(145deg, #f0f0f0 0%, #e2e2e2 50%, #d8d8d8 100%);
+  border: 2px dashed rgba(0, 0, 0, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.25s ease,
+    background 0.25s ease;
+}
+
+a.gallery-grid-item--more:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: rgba(0, 0, 0, 0.22);
+  background: linear-gradient(145deg, #f5f5f5 0%, #ebebeb 50%, #e0e0e0 100%);
+}
+
+.gallery-grid-item-more-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.gallery-grid-item-more-label {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: 0.02em;
+}
+
+.gallery-grid-item-more-hint {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .gallery-empty {

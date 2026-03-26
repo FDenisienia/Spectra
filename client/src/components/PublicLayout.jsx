@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useId } from 'react'
 import { Link, Outlet, useParams, useLocation } from 'react-router-dom'
-import { Nav, Spinner, Button, Accordion } from 'react-bootstrap'
+import { Nav, Spinner, Button, Accordion, Dropdown } from 'react-bootstrap'
 import * as api from '../api/tournament'
 
 function InstagramLogoIcon({ size = 24 }) {
@@ -26,8 +26,84 @@ const SPORT_LABEL = { padel: 'Pádel', futbol: 'Fútbol', hockey: 'Hockey' }
 const FORMATO_LABEL = { escalera: 'Escalera', grupo: 'Fase de Grupos', liga: 'Liga' }
 
 // Redes sociales – actualizar con datos reales
-const WHATSAPP_NUMBER = '5491112345678' // Formato internacional sin + ni espacios
-const INSTAGRAM_URL = 'https://instagram.com/spectra'
+const WHATSAPP_NUMBER = '5492214097730' // Formato internacional sin + ni espacios (AR: 54 + 9 + 2214097730)
+
+const INSTAGRAM_ACCOUNTS = [
+  {
+    label: 'Estrellas del Fútbol',
+    href: 'https://www.instagram.com/estrellasdelfutbolok?igsh=MTR1NTFqcDBmaHg3MQ==',
+    sport: 'futbol',
+  },
+  {
+    label: 'Entre Amigas',
+    href: 'https://www.instagram.com/entreamigashockey?igsh=b2wxbHg5MHY5eTFs',
+    sport: 'hockey',
+  },
+  {
+    label: 'Smash Open',
+    href: 'https://www.instagram.com/smashopenok?igsh=ZDBjem5uYjI0bTl2',
+    sport: 'padel',
+  },
+]
+
+function ExternalLinkChevron() {
+  return (
+    <svg className="spectra-ig-external-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path
+        d="M7 17L17 7M17 7H9M17 7V15"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** Separación entre el menú y el FAB (drop="up"). Ajustá el segundo número (px) si querés más o menos espacio. */
+const IG_MENU_POPPER_CONFIG = {
+  modifiers: [{ name: 'offset', options: { offset: [0, 10] } }],
+}
+
+function InstagramMenu({ className = '', toggleClassName = '', iconSize = 24, align = 'end', drop = 'down' }) {
+  const id = useId()
+  const toggleId = `spectra-ig-${id.replace(/:/g, '')}`
+
+  return (
+    <Dropdown className={`spectra-instagram-dropdown ${className}`} align={align} drop={drop}>
+      <Dropdown.Toggle
+        as="button"
+        type="button"
+        id={toggleId}
+        variant="link"
+        className={`spectra-instagram-toggle ${toggleClassName}`}
+        aria-label="Instagram — elegir cuenta"
+      >
+        <InstagramLogoIcon size={iconSize} />
+      </Dropdown.Toggle>
+      <Dropdown.Menu className="spectra-instagram-menu" popperConfig={IG_MENU_POPPER_CONFIG}>
+        <Dropdown.Header className="spectra-ig-menu-header">Cuentas oficiales</Dropdown.Header>
+        {INSTAGRAM_ACCOUNTS.map((acc) => (
+          <Dropdown.Item
+            key={acc.href}
+            className="spectra-ig-item"
+            href={acc.href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span className="spectra-ig-item-inner">
+              <span className="spectra-ig-item-main">
+                <span className="spectra-ig-sport">{SPORT_LABEL[acc.sport]}</span>
+                <span className="spectra-ig-name">{acc.label}</span>
+              </span>
+              <ExternalLinkChevron />
+            </span>
+          </Dropdown.Item>
+        ))}
+      </Dropdown.Menu>
+    </Dropdown>
+  )
+}
 
 const SIDEBAR_SECTIONS = [
   { key: 'smash-open', label: 'Smash Open', sport: 'padel' },
@@ -103,15 +179,6 @@ export default function PublicLayout() {
         <Link to="/" className="spectra-brand d-flex align-items-center" onClick={() => setSidebarOpen(false)}>
           <img src="/images/spectra-logo.png" alt="Spectra" className="spectra-logo spectra-logo-sidebar" />
         </Link>
-        <a
-          href={INSTAGRAM_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="spectra-instagram-link spectra-instagram-sidebar d-none d-md-flex"
-          aria-label="Instagram"
-        >
-          <InstagramLogoIcon size={20} />
-        </a>
         <Button
           variant="link"
           className="spectra-sidebar-close d-md-none"
@@ -217,15 +284,7 @@ export default function PublicLayout() {
           <Link to="/" className="spectra-topbar-brand d-flex align-items-center">
             <img src="/images/spectra-logo.png" alt="Spectra" className="spectra-logo spectra-logo-topbar" />
           </Link>
-          <a
-            href={INSTAGRAM_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="spectra-instagram-link spectra-instagram-topbar d-flex d-md-none"
-            aria-label="Instagram"
-          >
-            <InstagramLogoIcon size={22} />
-          </a>
+          <span className="spectra-topbar-spacer" aria-hidden="true" />
         </header>
         <main className="spectra-main">
           <Outlet />
@@ -234,15 +293,11 @@ export default function PublicLayout() {
 
       {/* Botones flotantes: Instagram arriba, WhatsApp abajo */}
       <div className="spectra-float-socials">
-        <a
-          href={INSTAGRAM_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="spectra-instagram-float"
-          aria-label="Instagram"
-        >
-          <InstagramLogoIcon size={24} />
-        </a>
+        <InstagramMenu
+          toggleClassName="spectra-instagram-float"
+          iconSize={24}
+          drop="up"
+        />
         <a
           href={`https://wa.me/${WHATSAPP_NUMBER}`}
           target="_blank"

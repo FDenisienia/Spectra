@@ -8,6 +8,8 @@ import { isLeagueFormat } from '../utils/tournamentFormat'
 import { reglamentoPublicHref } from '../utils/reglamentoUrl'
 import '../styles/League.css'
 
+const SPORTSREEL_COMPLEJO_ARENA_URL = 'https://sportsreel.com.ar/#/complejo/Complejo%20Arena'
+
 export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
   const isLeague = isLeagueFormat(tournament)
   const [teams, setTeams] = useState([])
@@ -158,18 +160,35 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
                 {tournament.status === 'active' ? ' · Activo' : tournament.status === 'finished' ? ' · Finalizado' : ''}
               </p>
             </div>
-            {tournament.reglamento_url && (
-              <Button
-                as="a"
-                variant="outline-primary"
-                size="sm"
-                className="flex-shrink-0 align-self-start league-header-reglamento-btn"
-                href={reglamentoPublicHref(tournament.reglamento_url)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Reglamento
-              </Button>
+            {(tournament.reglamento_url || tournament.sport === 'futbol' || tournament.sport === 'hockey') && (
+              <div className="d-flex flex-shrink-0 align-self-start gap-2 flex-wrap justify-content-end">
+                {tournament.reglamento_url && (
+                  <Button
+                    as="a"
+                    variant="outline-primary"
+                    size="sm"
+                    className="league-header-reglamento-btn"
+                    href={reglamentoPublicHref(tournament.reglamento_url)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Reglamento
+                  </Button>
+                )}
+                {(tournament.sport === 'futbol' || tournament.sport === 'hockey') && (
+                  <Button
+                    as="a"
+                    variant="outline-primary"
+                    size="sm"
+                    className="league-header-reglamento-btn"
+                    href={SPORTSREEL_COMPLEJO_ARENA_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Revivi tu partido
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         </div>

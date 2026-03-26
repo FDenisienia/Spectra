@@ -1,12 +1,12 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, memo } from 'react'
 import { Container } from 'react-bootstrap'
-import { SPORTS, getImagesBySport } from '../../config/galleryData'
+import { SPORTS, getImagesBySport, getMorePhotosUrl } from '../../config/galleryData'
 import GalleryLightbox from './GalleryLightbox'
 
 const SPORT_ORDER = ['hockey', 'padel', 'futbol']
 
-function SportCard({ sport, onClick }) {
-  const { id, name, coverImage, coverAlt } = sport
+const SportCard = memo(function SportCard({ sport, onClick }) {
+  const { id, name, coverImage } = sport
   return (
     <button
       type="button"
@@ -24,9 +24,9 @@ function SportCard({ sport, onClick }) {
       </div>
     </button>
   )
-}
+})
 
-function GalleryGrid({ images, onImageClick }) {
+function GalleryGrid({ images, onImageClick, morePhotosUrl }) {
   return (
     <div className="gallery-grid">
       {images.map((img, idx) => (
@@ -41,6 +41,20 @@ function GalleryGrid({ images, onImageClick }) {
           <div className="gallery-grid-item-overlay" />
         </button>
       ))}
+      {morePhotosUrl ? (
+        <a
+          href={morePhotosUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="gallery-grid-item gallery-grid-item--more"
+          aria-label="Ver más fotos en Google Drive"
+        >
+          <span className="gallery-grid-item-more-inner">
+            <span className="gallery-grid-item-more-label">Ver más</span>
+            <span className="gallery-grid-item-more-hint">Google Drive</span>
+          </span>
+        </a>
+      ) : null}
     </div>
   )
 }
@@ -50,6 +64,7 @@ export default function GallerySection() {
   const [lightboxIndex, setLightboxIndex] = useState(-1)
 
   const images = activeSport ? getImagesBySport(activeSport) : []
+  const morePhotosUrl = activeSport ? getMorePhotosUrl(activeSport) : null
 
   const openLightbox = useCallback((index) => {
     setLightboxIndex(index)
@@ -116,7 +131,11 @@ export default function GallerySection() {
 
         {/* Grid de imágenes */}
         {images.length > 0 ? (
-          <GalleryGrid images={images} onImageClick={openLightbox} />
+          <GalleryGrid
+            images={images}
+            onImageClick={openLightbox}
+            morePhotosUrl={morePhotosUrl}
+          />
         ) : (
           <p className="gallery-empty">No hay imágenes en esta galería todavía.</p>
         )}
