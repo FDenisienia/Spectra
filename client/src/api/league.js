@@ -111,13 +111,26 @@ export async function createTeam(tournamentId, { name, shield_url, zone_id }) {
 }
 
 export async function updateTeam(tournamentId, teamId, payload) {
+  const isForm = payload instanceof FormData
   const res = await fetch(`${base(tournamentId)}/teams/${teamId}`, {
     method: 'PATCH',
-    headers: jsonHeaders(),
-    body: JSON.stringify(payload),
+    headers: isForm ? authHeaders() : jsonHeaders(),
+    body: isForm ? payload : JSON.stringify(payload),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
+}
+
+export async function uploadTeamShield(tournamentId, teamId, file) {
+  const fd = new FormData()
+  fd.append('shield', file, file.name)
+  return updateTeam(tournamentId, teamId, fd)
+}
+
+export async function clearTeamShield(tournamentId, teamId) {
+  const fd = new FormData()
+  fd.append('clear_shield', '1')
+  return updateTeam(tournamentId, teamId, fd)
 }
 
 export async function deleteTeam(tournamentId, teamId) {

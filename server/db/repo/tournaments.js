@@ -30,7 +30,7 @@ function rowToTournament(row) {
 /** Torneos de pádel con state completo (1 query) para ranking global */
 export async function getAllPadelWithState() {
   const [rows] = await pool.query(
-    'SELECT id, state_json FROM tournaments WHERE sport = ? ORDER BY created_at DESC',
+    "SELECT id, state_json FROM tournaments WHERE sport = ? AND status <> 'inactive' ORDER BY created_at DESC",
     ['padel']
   )
   return rows.map((r) => {
@@ -45,6 +45,10 @@ export async function getAll(filters = {}) {
   if (filters.status) {
     sql += ' AND status = ?'
     params.push(filters.status)
+  }
+  if (filters.excludeStatus) {
+    sql += ' AND status <> ?'
+    params.push(filters.excludeStatus)
   }
   if (filters.sport) {
     sql += ' AND sport = ?'

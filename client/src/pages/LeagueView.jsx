@@ -4,8 +4,10 @@ import { Container, Card, Spinner, Alert, ListGroup, Table, Button, Row, Col } f
 import * as api from '../api/league'
 import TeamDetail from './TeamDetail'
 import TournamentLogo from '../components/tournament/TournamentLogo'
+import TeamShield from '../components/league/TeamShield'
 import { isLeagueFormat } from '../utils/tournamentFormat'
 import { reglamentoPublicHref } from '../utils/reglamentoUrl'
+import { formatMatchDateTimeArgentina } from '../utils/matchDateTime'
 import '../styles/League.css'
 
 const SPORTSREEL_COMPLEJO_ARENA_URL = 'https://sportsreel.com.ar/#/complejo/Complejo%20Arena'
@@ -21,6 +23,8 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
   const [error, setError] = useState(null)
   const [playoffBracket, setPlayoffBracket] = useState([])
   const [phaseFinalStandings, setPhaseFinalStandings] = useState({ upper: [], lower: [] })
+  const [currentMatchday, setCurrentMatchday] = useState(null)
+  const [currentMatchdayMatches, setCurrentMatchdayMatches] = useState([])
 
   useEffect(() => {
     if (!tournamentId) return
@@ -78,6 +82,24 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
         .catch((e) => setError(e.message))
     }
   }, [tournamentId, zones, isLeague])
+
+  useEffect(() => {
+    if (!tournamentId || !isLeague) return
+    api.getCurrentMatchday(tournamentId)
+      .then((md) => setCurrentMatchday(md || null))
+      .catch(() => setCurrentMatchday(null))
+  }, [tournamentId, isLeague])
+
+  useEffect(() => {
+    if (!tournamentId || !isLeague || !currentMatchday?.id) {
+      setCurrentMatchdayMatches([])
+      return
+    }
+    const zoneId = zones.length > 0 ? (activeZoneId || zones[0]?.id) : null
+    api.getMatches(tournamentId, currentMatchday.id, zoneId ? { zoneId } : {})
+      .then((matches) => setCurrentMatchdayMatches(matches || []))
+      .catch(() => setCurrentMatchdayMatches([]))
+  }, [tournamentId, isLeague, currentMatchday?.id, activeZoneId, zones])
 
   useEffect(() => {
     if (!tournamentId || !isLeague) return
@@ -146,6 +168,15 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
   const colSC = isPadel ? 'SC' : 'GC'
   const colDG = isPadel ? 'DS' : 'DG'
 
+  const formatFechaMatchScore = (m) => {
+    if (m.status !== 'played') return null
+    const sets = `${m.home_score ?? 0} - ${m.away_score ?? 0}`
+    if (isPadel && (m.home_games != null || m.away_games != null)) {
+      return `${sets} (${m.home_games ?? 0}-${m.away_games ?? 0} games)`
+    }
+    return sets
+  }
+
   return (
     <div className="league-page">
       <Container className="league-page-container py-3 py-md-4 py-lg-5">
@@ -211,12 +242,112 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
           <>
             <ZoneFilter />
 
-            {/* 2. Tabla de ranking (por zona si hay zonas) */}
+            <div className="league-pre-standings mb-4">
+              <Row className="g-3">
+                {currentMatchday?.number != null && (
+                  <Col xs={12} lg={isPadel ? 12 : 7}>
+                    <Card className="h-100 league-current-matchday-card mb-0">
+                      <Card.Header className="fw-bold">
+                        <div className="d-flex flex-wrap align-items-center gap-2">
+                          <span>{tournament.status === 'finished' ? 'Última fecha' : 'Fecha actual'}</span>
+                          <span className="league-current-matchday__value">Fecha {currentMatchday.number}</span>
+                          {zones.length > 0 && effectiveZoneId && (
+                            <span className="league-card-header-zone fw-normal ms-sm-auto small">
+                              {zones.find((z) => z.id === effectiveZoneId)?.name}
+                            </span>
+                          )}
+                        </div>
+                        {tournament.status !== 'finished' && (
+                          <p className="league-current-matchday__hint mb-0 mt-2 fw-normal">
+                            Permanece activa hasta que se jueguen todos los partidos de esta fecha.
+                          </p>
+                        )}
+                      </Card.Header>
+                      <Card.Body className="p-0">
+                        {currentMatchdayMatches.length === 0 ? (
+                          <div className="league-empty p-3 text-muted small mb-0">Sin partidos en esta fecha.</div>
+                        ) : (
+                          <ListGroup variant="flush">
+                            {currentMatchdayMatches.map((m) => {
+                              const played = m.status === 'played'
+                              const score = formatFechaMatchScore(m)
+                              return (
+                                <ListGroup.Item key={m.id} className="league-fecha-match">
+                                  <div className="league-fecha-match__row">
+                                    <div className="league-fecha-match__team league-fecha-match__team--home">
+                                      <TeamShield url={m.home_shield} name={m.home_team_name} size={36} />
+                                      <span className="league-fecha-match__name">{m.home_team_name}</span>
+                                    </div>
+                                    <div className={`league-fecha-match__score${played ? ' league-fecha-match__score--played' : ''}`}>
+                                      {played ? score : 'vs'}
+                                    </div>
+                                    <div className="league-fecha-match__team league-fecha-match__team--away">
+                                      <span className="league-fecha-match__name">{m.away_team_name}</span>
+                                      <TeamShield url={m.away_shield} name={m.away_team_name} size={36} />
+                                    </div>
+                                  </div>
+                                  {m.played_at && (
+                                    <div className="league-fecha-match__meta text-muted small">
+                                      {formatMatchDateTimeArgentina(m.played_at)}
+                                    </div>
+                                  )}
+                                </ListGroup.Item>
+                              )
+                            })}
+                          </ListGroup>
+                        )}
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                )}
+
+                {!isPadel && (
+                  <Col xs={12} lg={currentMatchday?.number != null ? 5 : 12}>
+                    <Card className="h-100 mb-0">
+                      <Card.Header className="fw-bold">
+                        Goleadores — Top 10
+                        {zones.length > 0 && effectiveZoneId && (
+                          <span className="league-card-header-zone fw-normal ms-2">— {zones.find((z) => z.id === effectiveZoneId)?.name}</span>
+                        )}
+                      </Card.Header>
+                      <Card.Body className="p-0">
+                        {scorers.length === 0 ? (
+                          <div className="league-empty p-4 text-muted">Sin goles cargados.</div>
+                        ) : (
+                          <Table responsive hover className="mb-0">
+                            <thead className="table-light">
+                              <tr>
+                                <th>#</th>
+                                <th>Jugador</th>
+                                <th>Equipo</th>
+                                <th>Goles</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {scorers.map((row) => (
+                                <tr key={`${row.player_name}-${row.team_id}`}>
+                                  <td className="fw-semibold">{row.position}</td>
+                                  <td>{row.player_name}</td>
+                                  <td>{row.team_name}</td>
+                                  <td>{row.goals}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Table>
+                        )}
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                )}
+              </Row>
+            </div>
+
+            {/* Tabla de ranking (por zona si hay zonas) */}
             <Card className="mb-4">
               <Card.Header className="fw-bold">
                 Tabla de posiciones
                 {zones.length > 0 && effectiveZoneId && (
-                  <span className="text-muted fw-normal ms-2">— {zones.find((z) => z.id === effectiveZoneId)?.name}</span>
+                  <span className="league-card-header-zone fw-normal ms-2">— {zones.find((z) => z.id === effectiveZoneId)?.name}</span>
                 )}
               </Card.Header>
               <Card.Body className="p-0">
@@ -264,44 +395,6 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
                 )}
               </Card.Body>
             </Card>
-
-            {/* 3. Tabla de goleadores (solo futbol/hockey; padel no tiene) */}
-            {!isPadel && (
-            <Card className="mb-4">
-              <Card.Header className="fw-bold">
-                Goleadores
-                {zones.length > 0 && effectiveZoneId && (
-                  <span className="text-muted fw-normal ms-2">— {zones.find((z) => z.id === effectiveZoneId)?.name}</span>
-                )}
-              </Card.Header>
-              <Card.Body className="p-0">
-                {scorers.length === 0 ? (
-                  <div className="league-empty p-4 text-muted">Sin goles cargados.</div>
-                ) : (
-                  <Table responsive hover className="mb-0">
-                    <thead className="table-light">
-                      <tr>
-                        <th>#</th>
-                        <th>Jugador</th>
-                        <th>Equipo</th>
-                        <th>Goles</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {scorers.map((row) => (
-                        <tr key={`${row.player_name}-${row.team_id}`}>
-                          <td className="fw-semibold">{row.position}</td>
-                          <td>{row.player_name}</td>
-                          <td>{row.team_name}</td>
-                          <td>{row.goals}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                )}
-              </Card.Body>
-            </Card>
-            )}
 
             {/* Playoffs (Fase de Grupos) o Fase final mini-ligas (Liga) */}
             {playoffBracket.length > 0 && (
@@ -367,7 +460,7 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
               <Card.Header className="fw-bold">
                 {teamsLabel} participantes
                 {zones.length > 0 && effectiveZoneId && (
-                  <span className="text-muted fw-normal ms-2">({zones.find((z) => z.id === effectiveZoneId)?.name})</span>
+                  <span className="league-card-header-zone fw-normal ms-2">({zones.find((z) => z.id === effectiveZoneId)?.name})</span>
                 )}
               </Card.Header>
               <Card.Body className="p-0">
@@ -381,11 +474,9 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
                         action
                         as={Link}
                         to={`/torneo/${tournamentId}/equipo/${t.id}`}
-                        className="d-flex align-items-center"
+                        className="d-flex align-items-center gap-3"
                       >
-                        {t.shield_url && (
-                          <img src={t.shield_url} alt="" className="me-3" style={{ width: 28, height: 28, objectFit: 'contain' }} />
-                        )}
+                        <TeamShield url={t.shield_url} name={t.name} size={36} />
                         <span className="fw-medium">{t.name}</span>
                         {t.zone_name && <span className="text-muted small ms-2">({t.zone_name})</span>}
                       </ListGroup.Item>

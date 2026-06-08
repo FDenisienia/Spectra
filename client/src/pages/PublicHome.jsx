@@ -1,6 +1,11 @@
-import { lazy, Suspense } from 'react'
-import { Container } from 'react-bootstrap'
+import { lazy, Suspense, useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import { Container, Spinner } from 'react-bootstrap'
 import { useInView } from '../hooks/useInView'
+import * as api from '../api/tournament'
+
+const SPORT_LABEL = { padel: 'Pádel', futbol: 'Fútbol', hockey: 'Hockey' }
+const MODALITY_LABEL = { escalera: 'Escalera', grupo: 'Fase de Grupos', liga: 'Liga' }
 
 const GallerySection = lazy(() => import('../components/gallery/GallerySection'))
 const SponsorsCarousel = lazy(() => import('../components/SponsorsCarousel'))
@@ -69,10 +74,43 @@ function landingRevealClass(visible) {
 
 export default function PublicHome() {
   const paragraphs = HERO_DESCRIPTION.split(/\n\n+/).filter((p) => p.trim())
+  const [activeTournaments, setActiveTournaments] = useState([])
+  const [loadingTournaments, setLoadingTournaments] = useState(true)
+  const [tournamentsRef, tournamentsVisible] = useInView(revealRoot)
   const [venuesRef, venuesVisible] = useInView(revealRoot)
   const [galleryRef, galleryVisible] = useInView(revealRoot)
   const [sponsorsRef, sponsorsVisible] = useInView(revealRoot)
   const [footerRef, footerVisible] = useInView({ rootMargin: '0px 0px -5% 0px' })
+
+  useEffect(() => {
+    let cancelled = false
+    api.getTournaments()
+      .then((list) => {
+        if (!cancelled) {
+          setActiveTournaments((list || []).filter((t) => t.status === 'active'))
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setActiveTournaments([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTournaments(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  const formatTournamentDates = (start, end) => {
+    if (!start && !end) return null
+    const fmt = (d) => {
+      try {
+        return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+      } catch {
+        return d
+      }
+    }
+    if (start && end) return `${fmt(start)} – ${fmt(end)}`
+    return start ? `Desde ${fmt(start)}` : `Hasta ${fmt(end)}`
+  }
 
   return (
     <div className="landing-page home-page">
@@ -87,6 +125,43 @@ export default function PublicHome() {
           </div>
           </Container>
         </section>
+
+        {(loadingTournaments || activeTournaments.length > 0) && (
+          <section
+            ref={tournamentsRef}
+            className={`home-tournaments-section ${landingRevealClass(tournamentsVisible)}`}
+          >
+            <Container fluid className="home-tournaments-container px-3 px-md-4">
+              <h2 className="home-section-title">Torneos en curso</h2>
+              {loadingTournaments ? (
+                <div className="text-center py-4">
+                  <Spinner animation="border" size="sm" />
+                </div>
+              ) : (
+                <div className="home-tournaments-grid">
+                  {activeTournaments.map((t) => {
+                    const dates = formatTournamentDates(t.start_date, t.end_date)
+                    const sportLine = [
+                      SPORT_LABEL[t.sport] || t.sport,
+                      t.modality ? MODALITY_LABEL[t.modality] || t.modality : null,
+                    ].filter(Boolean).join(' · ')
+                    return (
+                      <Link key={t.id} to={`/torneo/${t.id}`} className="home-tournament-card">
+                        <h3 className="home-tournament-card__title">{t.name}</h3>
+                        <p className="home-tournament-card__sport">{sportLine}</p>
+                        {dates && <p className="home-tournament-card__dates">{dates}</p>}
+                        {t.rules?.trim() && (
+                          <p className="home-tournament-card__desc">{t.rules.trim().slice(0, 140)}{t.rules.trim().length > 140 ? '…' : ''}</p>
+                        )}
+                        <span className="home-tournament-card__cta">Ver torneo</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </Container>
+          </section>
+        )}
 
         <section
           ref={venuesRef}

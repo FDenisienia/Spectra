@@ -24,7 +24,7 @@ import { ensureSchema, pool } from './db/index.js'
 import { seedAdmin } from './db/seedAdmin.js'
 import * as tournamentsRepo from './db/repo/tournaments.js'
 import * as leagueRepo from './db/repo/league.js'
-import { login, requireAuth, changePassword } from './auth.js'
+import { login, requireAuth, changePassword, optionalAuth } from './auth.js'
 import { normalizePlayedAtForDb } from './playedAt.js'
 import {
   ensureReglamentosDir,
@@ -34,12 +34,21 @@ import {
   createReglamentoUploader,
   unlinkSilent,
 } from './reglamentoUpload.js'
+import {
+  ensureShieldsDir,
+  publicShieldPath,
+  validateImageFile,
+  removeShieldFiles,
+  removeOtherShieldExtensions,
+  createShieldUploader,
+} from './shieldUpload.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
 const uploadReglamentoCreate = createReglamentoUploader((req) => req._pendingTournamentId)
 const uploadReglamentoPatch = createReglamentoUploader((req) => req.params.id)
+const uploadShieldPatch = createShieldUploader((req) => req.params.teamId)
 const PORT = process.env.PORT || 3000
 
 // CORS: headers manuales + cors() para garantizar compatibilidad
@@ -146,10 +155,17 @@ app.get('/api/ranking/global', async (req, res) => {
 })
 
 // --- Torneos: listar (público) y crear (admin) ---
-app.get('/api/tournaments', async (req, res) => {
+const TOURNAMENT_STATUSES = new Set(['active', 'finished', 'inactive'])
+
+app.get('/api/tournaments', optionalAuth, async (req, res) => {
   try {
     const status = req.query.status || null
-    const list = await tournamentsRepo.getAll(status ? { status } : {})
+    const wantAll = req.query.all === '1' || req.query.all === 'true'
+    if (wantAll && !req.auth) return res.status(401).json({ error: 'No autorizado' })
+    const filters = {}
+    if (status) filters.status = status
+    else if (!wantAll) filters.excludeStatus = 'inactive'
+    const list = await tournamentsRepo.getAll(filters)
     res.json(list)
   } catch (e) {
     console.error('GET /api/tournaments error:', e)
@@ -190,7 +206,7 @@ app.post('/api/tournaments', requireAuth, tournamentCreateMultipart, async (req,
       sport: sport || 'padel',
       modality: modality || (sport === 'padel' ? 'escalera' : 'liga'),
       gender: sport === 'futbol' ? (gender || null) : null,
-      status: status || 'active',
+      status: status && TOURNAMENT_STATUSES.has(status) ? status : 'active',
       start_date: start_date || null,
       end_date: end_date || null,
       rules: rules != null ? rules : '',
@@ -218,10 +234,13 @@ app.post('/api/tournaments', requireAuth, tournamentCreateMultipart, async (req,
 })
 
 // --- Torneo por id: ver (público), actualizar y eliminar (admin) ---
-app.get('/api/tournament/:id', async (req, res) => {
+app.get('/api/tournament/:id', optionalAuth, async (req, res) => {
   try {
     const t = await tournamentsRepo.getById(req.params.id)
     if (!t) return res.status(404).json({ error: 'Torneo no encontrado' })
+    if (t.status === 'inactive' && !req.auth) {
+      return res.status(404).json({ error: 'Torneo no encontrado' })
+    }
     res.json({
       id: t.id,
       name: t.name,
@@ -267,7 +286,12 @@ app.patch('/api/tournament/:id', requireAuth, tournamentPatchMultipart, async (r
     if (sport != null) updates.sport = sport
     if (modality != null) updates.modality = modality
     if (gender !== undefined) updates.gender = t.sport === 'futbol' ? (gender || null) : null
-    if (status != null) updates.status = status
+    if (status != null) {
+      if (!TOURNAMENT_STATUSES.has(status)) {
+        return res.status(400).json({ error: 'Estado de torneo inválido' })
+      }
+      updates.status = status
+    }
     if (start_date !== undefined) updates.start_date = start_date
     if (end_date !== undefined) updates.end_date = end_date
     if (rules !== undefined) updates.rules = rules
@@ -609,18 +633,54 @@ app.post('/api/tournament/:id/league/teams', requireAuth, async (req, res) => {
   }
 })
 
-app.patch('/api/tournament/:id/league/teams/:teamId', requireAuth, async (req, res) => {
+function teamPatchMultipart(req, res, next) {
+  const ct = req.headers['content-type'] || ''
+  if (!ct.includes('multipart/form-data')) return next()
+  return uploadShieldPatch.single('shield')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Error al subir el archivo' })
+    }
+    next()
+  })
+}
+
+app.patch('/api/tournament/:id/league/teams/:teamId', requireAuth, teamPatchMultipart, async (req, res) => {
   try {
-    const team = await leagueRepo.updateTeam(req.params.teamId, req.body || {})
+    const body = req.body || {}
+    const updates = {}
+    if (body.name != null && String(body.name).trim()) updates.name = String(body.name).trim()
+    if (body.zone_id !== undefined) updates.zone_id = body.zone_id || null
+    if (body.shield_url !== undefined && !req.file) updates.shield_url = body.shield_url || null
+    const clearShield =
+      body.clear_shield === true ||
+      body.clear_shield === 'true' ||
+      body.clear_shield === '1'
+    if (req.file) {
+      try {
+        await validateImageFile(req.file.path)
+      } catch (e) {
+        await unlinkSilent(req.file.path)
+        return res.status(400).json({ error: e.message || 'Archivo inválido' })
+      }
+      const ext = path.extname(req.file.filename).toLowerCase()
+      await removeOtherShieldExtensions(req.params.teamId, ext)
+      updates.shield_url = publicShieldPath(req.params.teamId, ext)
+    } else if (clearShield) {
+      await removeShieldFiles(req.params.teamId)
+      updates.shield_url = null
+    }
+    const team = await leagueRepo.updateTeam(req.params.teamId, updates)
     if (!team) return res.status(404).json({ error: 'Equipo no encontrado' })
     res.json(team)
   } catch (e) {
+    if (req.file) await unlinkSilent(req.file.path)
     res.status(400).json({ error: e.message })
   }
 })
 
 app.delete('/api/tournament/:id/league/teams/:teamId', requireAuth, async (req, res) => {
   try {
+    await removeShieldFiles(req.params.teamId)
     const ok = await leagueRepo.deleteTeam(req.params.teamId)
     if (!ok) return res.status(404).json({ error: 'Equipo no encontrado' })
     res.status(204).send()
@@ -1091,6 +1151,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Torneos: http://localhost:${PORT}/api/tournaments`)
   ensureSchema()
     .then(() => ensureReglamentosDir())
+    .then(() => ensureShieldsDir())
     .then(() => seedAdmin())
     .then(() => console.log('[Spectra] Base de datos lista'))
     .catch((err) => console.error('[Spectra] Error init DB:', err.message))

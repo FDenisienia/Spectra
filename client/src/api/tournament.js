@@ -34,9 +34,21 @@ export async function getGlobalRanking() {
 
 // --- Lista y administración de torneos ---
 
-export async function getTournaments(status = null) {
-  const url = status ? `${BASE}/tournaments?status=${encodeURIComponent(status)}` : `${BASE}/tournaments`
-  const res = await fetch(url)
+export async function getTournaments(options = null) {
+  let status = null
+  let all = false
+  if (typeof options === 'string') {
+    status = options
+  } else if (options && typeof options === 'object') {
+    status = options.status ?? null
+    all = Boolean(options.all)
+  }
+  const params = new URLSearchParams()
+  if (status) params.set('status', status)
+  if (all) params.set('all', '1')
+  const qs = params.toString()
+  const url = `${BASE}/tournaments${qs ? `?${qs}` : ''}`
+  const res = await fetch(url, { headers: all ? authHeaders() : undefined })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }

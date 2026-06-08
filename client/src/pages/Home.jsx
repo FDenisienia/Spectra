@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Container, Navbar, Nav, Button, Card, ListGroup, Spinner, Alert, Table, Modal, Form } from 'react-bootstrap'
 import * as api from '../api/tournament'
+import { useConfirm } from '../hooks/useConfirm'
 
 export default function Home() {
   const navigate = useNavigate()
+  const { confirm, ConfirmDialog } = useConfirm()
   const [tournaments, setTournaments] = useState([])
   const [globalRanking, setGlobalRanking] = useState([])
   const [loading, setLoading] = useState(true)
@@ -65,7 +67,12 @@ export default function Home() {
   const handleDelete = async (e, id, name) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!window.confirm(`¿Eliminar el torneo "${name}"? No se puede deshacer.`)) return
+    if (!(await confirm({
+      title: 'Eliminar torneo',
+      message: `¿Eliminar el torneo "${name}"? No se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    }))) return
     try {
       await api.deleteTournament(id)
       setTournaments((prev) => prev.filter((t) => t.id !== id))
@@ -250,6 +257,7 @@ export default function Home() {
           <small>Spectra © {new Date().getFullYear()} — Torneo Escalera Pádel</small>
         </Container>
       </footer>
+      <ConfirmDialog />
     </>
   )
 }

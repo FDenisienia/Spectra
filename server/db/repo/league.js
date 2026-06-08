@@ -1178,6 +1178,8 @@ function headToHead(teamA, teamB, matches, ptsWin, ptsDraw) {
 }
 
 // --- Top scorers ---
+const TOP_SCORERS_LIMIT = 10
+
 export async function getScorers(tournamentId, { zoneId = null } = {}) {
   let sql = `SELECT g.player_name, g.team_id, t.name AS team_name, SUM(COALESCE(g.goals, 1)) AS goals
      FROM league_goals g
@@ -1190,7 +1192,8 @@ export async function getScorers(tournamentId, { zoneId = null } = {}) {
     sql += ' AND (m.zone_id = ? OR (m.zone_id IS NULL AND t.zone_id = ?))'
     params.push(zoneId, zoneId)
   }
-  sql += ' GROUP BY g.player_name, g.team_id, t.name ORDER BY goals DESC, g.player_name'
+  sql += ' GROUP BY g.player_name, g.team_id, t.name ORDER BY goals DESC, g.player_name LIMIT ?'
+  params.push(TOP_SCORERS_LIMIT)
   const [rows] = await pool.query(sql, params)
   return rows.map((r, i) => ({ position: i + 1, player_name: r.player_name, team_name: r.team_name, team_id: r.team_id, goals: Number(r.goals) }))
 }
@@ -1219,7 +1222,7 @@ export async function getScorersGlobal(tournamentId, { zoneId = null } = {}) {
     combined[key].goals += Number(r.goals)
   }
   const list = Object.values(combined).sort((a, b) => b.goals - a.goals || (a.player_name || '').localeCompare(b.player_name || ''))
-  return list.map((r, i) => ({ position: i + 1, player_name: r.player_name, team_name: r.team_name, team_id: r.team_id, goals: r.goals }))
+  return list.slice(0, TOP_SCORERS_LIMIT).map((r, i) => ({ position: i + 1, player_name: r.player_name, team_name: r.team_name, team_id: r.team_id, goals: r.goals }))
 }
 
 // --- Discipline (cards by player) ---
@@ -1293,8 +1296,8 @@ export async function getScorersByTeam(tournamentId, teamId) {
      JOIN league_matchdays md ON m.matchday_id = md.id
      JOIN league_teams t ON g.team_id = t.id
      WHERE md.tournament_id = ? AND g.team_id = ?
-     GROUP BY g.player_name, g.team_id, t.name ORDER BY goals DESC, g.player_name`,
-    [tournamentId, teamId]
+     GROUP BY g.player_name, g.team_id, t.name ORDER BY goals DESC, g.player_name LIMIT ?`,
+    [tournamentId, teamId, TOP_SCORERS_LIMIT]
   )
   return rows.map((r, i) => ({
     position: i + 1,

@@ -4,6 +4,7 @@ import { Container, Card, Table, Spinner, Alert, Button, Nav } from 'react-boots
 import * as api from '../api/league'
 import { formatMatchDateTimeArgentina } from '../utils/matchDateTime'
 import TournamentLogo from '../components/tournament/TournamentLogo'
+import TeamShield from '../components/league/TeamShield'
 import '../styles/League.css'
 import '../styles/TeamDetailSlider.css'
 
@@ -126,13 +127,21 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
           </Button>
         </div>
         <TournamentLogo sport={tournament.sport} gender={tournament.gender} darkBg />
-        <div className="league-header mb-4">
-          <h1>{data?.team?.name ?? (isPadel ? 'Pareja' : 'Equipo')}</h1>
-          <p className="subtitle mb-0 text-muted">
-            {tournament.name || 'Liga'}
-            {tournament.sport === 'futbol' && tournament.gender && ` · ${tournament.gender === 'masculino' ? 'Masculino' : tournament.gender === 'femenino' ? 'Femenino' : 'Mixto'}`}
-            {' · '}{isPadel ? 'Integrantes y estadísticas de la pareja' : 'Jugadores y estadísticas del equipo'}
-          </p>
+        <div className="league-header mb-4 d-flex align-items-center gap-3 flex-wrap">
+          <TeamShield
+            url={data?.team?.shield_url}
+            name={data?.team?.name}
+            size={56}
+            className="league-team-shield--header flex-shrink-0"
+          />
+          <div className="min-w-0">
+            <h1 className="mb-1">{data?.team?.name ?? (isPadel ? 'Pareja' : 'Equipo')}</h1>
+            <p className="subtitle mb-0">
+              {tournament.name || 'Liga'}
+              {tournament.sport === 'futbol' && tournament.gender && ` · ${tournament.gender === 'masculino' ? 'Masculino' : tournament.gender === 'femenino' ? 'Femenino' : 'Mixto'}`}
+              {' · '}{isPadel ? 'Integrantes y estadísticas de la pareja' : 'Jugadores y estadísticas del equipo'}
+            </p>
+          </div>
         </div>
 
         {error && (

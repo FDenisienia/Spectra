@@ -27,7 +27,7 @@ export const statements = [
     state_json LONGTEXT NULL,
     modality VARCHAR(20) NULL,
     CONSTRAINT chk_tournaments_sport CHECK (sport IN ('padel','futbol','hockey')),
-    CONSTRAINT chk_tournaments_status CHECK (status IN ('active','finished')),
+    CONSTRAINT chk_tournaments_status CHECK (status IN ('active','finished','inactive')),
     CONSTRAINT chk_tournaments_modality CHECK (modality IS NULL OR modality IN ('escalera','grupo','liga'))
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
@@ -245,6 +245,8 @@ const migrationStatements = [
   "ALTER TABLE league_suspensions ADD CONSTRAINT chk_suspensions_reason CHECK (reason IN ('yellow_accumulation','green_accumulation','red_direct'))",
   "ALTER TABLE tournaments ADD COLUMN gender VARCHAR(20) NULL AFTER modality",
   'ALTER TABLE tournaments ADD COLUMN reglamento_url VARCHAR(500) NULL AFTER rules',
+  'ALTER TABLE tournaments DROP CHECK chk_tournaments_status',
+  "ALTER TABLE tournaments ADD CONSTRAINT chk_tournaments_status CHECK (status IN ('active','finished','inactive'))",
 ]
 const migrationFkStatements = [
   'ALTER TABLE league_teams ADD CONSTRAINT fk_league_teams_zone FOREIGN KEY (zone_id) REFERENCES league_zones(id) ON DELETE SET NULL',

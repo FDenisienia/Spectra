@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Container, Navbar, Nav, Button, Card, ListGroup, Spinner, Alert, Modal, Form } from 'react-bootstrap'
+import { Container, Navbar, Nav, Button, Card, ListGroup, Spinner, Alert, Modal, Form, Nav as BootstrapNav } from 'react-bootstrap'
 import * as api from '../api/tournament'
 import { logout, changePassword } from '../api/auth'
+import { useConfirm } from '../hooks/useConfirm'
 
 const SPORT_LABEL = { padel: 'Pádel', futbol: 'Fútbol', hockey: 'Hockey' }
 const MODALITY_LABEL = { escalera: 'Escalera', grupo: 'Fase de Grupos', liga: 'Liga' }
 const GENDER_LABEL = { masculino: 'Masculino', femenino: 'Femenino', mixto: 'Mixto' }
+const STATUS_LABEL = { active: 'Activo', finished: 'Finalizado', inactive: 'Desactivado' }
 // Deporte en orden alfabético: Fútbol, Hockey, Pádel
 const SPORT_OPTIONS = [
   { value: 'futbol', label: 'Fútbol' },
@@ -34,6 +36,7 @@ const GENDER_OPTIONS = [
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
+  const { confirm, ConfirmDialog } = useConfirm()
   const [tournaments, setTournaments] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -53,10 +56,12 @@ export default function AdminDashboard() {
   })
   const [reglamentoFile, setReglamentoFile] = useState(null)
   const [reglamentoInputKey, setReglamentoInputKey] = useState(0)
+  const [listTab, setListTab] = useState('published')
+  const [togglingId, setTogglingId] = useState(null)
 
   const load = () => {
     setLoading(true)
-    api.getTournaments()
+    api.getTournaments({ all: true })
       .then(setTournaments)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -172,13 +177,55 @@ export default function AdminDashboard() {
   const handleDelete = async (e, id, name) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!window.confirm(`¿Eliminar el torneo "${name}"? No se puede deshacer.`)) return
+    if (!(await confirm({
+      title: 'Eliminar torneo',
+      message: `¿Eliminar el torneo "${name}"? No se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    }))) return
     try {
       await api.deleteTournament(id)
       setTournaments((prev) => prev.filter((t) => t.id !== id))
     } catch (err) {
       setError(err.message)
     }
+  }
+
+  const handleToggleVisibility = async (e, t) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const deactivating = t.status !== 'inactive'
+    if (deactivating && !(await confirm({
+      title: 'Desactivar torneo',
+      message: `¿Desactivar "${t.name}"? Dejará de mostrarse en la web pública.`,
+      confirmLabel: 'Desactivar',
+      variant: 'warning',
+    }))) return
+    setTogglingId(t.id)
+    setError(null)
+    try {
+      await api.updateTournament(t.id, { status: deactivating ? 'inactive' : 'active' })
+      load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const visibleTournaments = tournaments.filter((t) =>
+    listTab === 'inactive' ? t.status === 'inactive' : t.status !== 'inactive'
+  )
+
+  const tournamentMeta = (t) => {
+    const parts = [
+      SPORT_LABEL[t.sport] || t.sport,
+      t.sport === 'futbol' && t.gender ? GENDER_LABEL[t.gender] || t.gender : null,
+      t.sport === 'padel' && t.modality ? MODALITY_LABEL[t.modality] || t.modality : null,
+      STATUS_LABEL[t.status] || t.status,
+      t.sport === 'padel' && t.modality === 'escalera' && t.config ? `Fecha ${t.currentDate || '-'}` : null,
+    ].filter(Boolean)
+    return parts.join(' · ')
   }
 
   const formatDate = (iso) => {
@@ -217,8 +264,27 @@ export default function AdminDashboard() {
         )}
 
         <Card className="shadow-sm">
-          <Card.Header className="d-flex justify-content-between align-items-center">
-            <span className="fw-bold">Torneos</span>
+          <Card.Header className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <BootstrapNav variant="tabs" className="admin-tournament-tabs border-0">
+              <BootstrapNav.Item>
+                <BootstrapNav.Link
+                  active={listTab === 'published'}
+                  onClick={() => setListTab('published')}
+                  className="py-1"
+                >
+                  Activos
+                </BootstrapNav.Link>
+              </BootstrapNav.Item>
+              <BootstrapNav.Item>
+                <BootstrapNav.Link
+                  active={listTab === 'inactive'}
+                  onClick={() => setListTab('inactive')}
+                  className="py-1"
+                >
+                  Desactivados
+                </BootstrapNav.Link>
+              </BootstrapNav.Item>
+            </BootstrapNav>
             <Button variant="primary" size="sm" onClick={handleOpenCreate} disabled={creating}>
               Crear torneo
             </Button>
@@ -229,13 +295,15 @@ export default function AdminDashboard() {
                 <Spinner animation="border" />
                 <p className="mt-2 text-muted">Cargando…</p>
               </div>
-            ) : tournaments.length === 0 ? (
+            ) : visibleTournaments.length === 0 ? (
               <p className="text-muted text-center py-5 mb-0">
-                No hay torneos. Creá uno para empezar.
+                {listTab === 'inactive'
+                  ? 'No hay torneos desactivados.'
+                  : 'No hay torneos activos. Creá uno para empezar.'}
               </p>
             ) : (
               <ListGroup variant="flush">
-                {tournaments.map((t) => (
+                {visibleTournaments.map((t) => (
                   <ListGroup.Item
                     key={t.id}
                     as={Link}
@@ -245,16 +313,18 @@ export default function AdminDashboard() {
                   >
                     <div>
                       <span className="fw-semibold">{t.name}</span>
-                      <span className="text-muted small ms-2">
-                        {SPORT_LABEL[t.sport] || t.sport}
-                        {t.sport === 'futbol' && t.gender && ` · ${GENDER_LABEL[t.gender] || t.gender}`}
-                        {t.sport === 'padel' && t.modality && ` · ${MODALITY_LABEL[t.modality] || t.modality}`}
-                        {` · ${t.status}`}
-                        {t.sport === 'padel' && t.modality === 'escalera' && t.config && ` · Fecha ${t.currentDate || '-'}`}
-                      </span>
+                      <span className="text-muted small ms-2">{tournamentMeta(t)}</span>
                     </div>
-                    <div className="d-flex align-items-center gap-2">
-                      <span className="text-muted small">{formatDate(t.createdAt)}</span>
+                    <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                      <span className="text-muted small d-none d-sm-inline">{formatDate(t.createdAt)}</span>
+                      <Button
+                        variant={t.status === 'inactive' ? 'outline-success' : 'outline-secondary'}
+                        size="sm"
+                        disabled={togglingId === t.id}
+                        onClick={(e) => handleToggleVisibility(e, t)}
+                      >
+                        {togglingId === t.id ? '…' : t.status === 'inactive' ? 'Activar' : 'Desactivar'}
+                      </Button>
                       <Button
                         variant="outline-danger"
                         size="sm"
@@ -432,6 +502,7 @@ export default function AdminDashboard() {
             </Modal.Footer>
           </Form>
         </Modal>
+        <ConfirmDialog />
       </Container>
     </>
   )

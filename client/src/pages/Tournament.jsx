@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import { Container, Navbar, Nav, Alert, Spinner, Form, Button, Card } from 'react-bootstrap'
 import * as api from '../api/tournament'
 import { reglamentoPublicHref } from '../utils/reglamentoUrl'
+import { useConfirm } from '../hooks/useConfirm'
 import TournamentConfig from '../components/tournament/TournamentConfig'
 import TournamentPlayers from '../components/tournament/TournamentPlayers'
 import RoundView from '../components/tournament/RoundView'
@@ -12,6 +13,7 @@ import '../styles/League.css'
 export default function Tournament({ isAdmin = false, tournament = {} }) {
   const { id: tournamentId } = useParams()
   const navigate = useNavigate()
+  const { confirm, ConfirmDialog } = useConfirm()
   const [state, setState] = useState(null)
   const [tournamentName, setTournamentName] = useState('')
   const [tournamentRules, setTournamentRules] = useState('')
@@ -231,7 +233,12 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
   }
 
   const handleRemoveReglamento = async () => {
-    if (!window.confirm('¿Quitar el reglamento publicado?')) return
+    if (!(await confirm({
+      title: 'Quitar reglamento',
+      message: '¿Quitar el reglamento publicado?',
+      confirmLabel: 'Quitar',
+      variant: 'warning',
+    }))) return
     setReglamentoSaving(true)
     setError(null)
     try {
@@ -398,7 +405,12 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
               type="button"
               className="btn btn-outline-danger btn-sm"
               onClick={async () => {
-                if (!window.confirm('¿Reiniciar todo el torneo? Se perderá el progreso.')) return
+                if (!(await confirm({
+                  title: 'Reiniciar torneo',
+                  message: '¿Reiniciar todo el torneo? Se perderá el progreso.',
+                  confirmLabel: 'Reiniciar',
+                  variant: 'danger',
+                }))) return
                 try {
                   await api.reset(tournamentId)
                   await fetchState()
@@ -480,6 +492,7 @@ export default function Tournament({ isAdmin = false, tournament = {} }) {
         )}
         </Container>
       </div>
+      <ConfirmDialog />
     </>
   )
 }

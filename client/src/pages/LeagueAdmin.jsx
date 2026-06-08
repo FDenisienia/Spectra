@@ -12,13 +12,17 @@ import {
   validateCardAddition,
 } from '../utils/matchEventsValidation'
 import { LeagueFixtureMatchRow, LeaguePlayoffFixtureRow } from '../components/league/LeagueFixtureMatchRows'
+import MatchPlayerCombobox from '../components/league/MatchPlayerCombobox'
 import '../styles/League.css'
 import { reglamentoPublicHref } from '../utils/reglamentoUrl'
+import { useConfirm } from '../hooks/useConfirm'
 
 const REGLAMENTO_MAX_BYTES = 5 * 1024 * 1024
+const SHIELD_MAX_BYTES = 2 * 1024 * 1024
 
 export default function LeagueAdmin() {
   const { id: tournamentId } = useParams()
+  const { confirm, ConfirmDialog } = useConfirm()
   const [tournament, setTournament] = useState(null)
   const [teams, setTeams] = useState([])
   const [matchdays, setMatchdays] = useState([])
@@ -76,6 +80,10 @@ export default function LeagueAdmin() {
   const [reglamentoFile, setReglamentoFile] = useState(null)
   const [reglamentoInputKey, setReglamentoInputKey] = useState(0)
   const [reglamentoSaving, setReglamentoSaving] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [editNameValue, setEditNameValue] = useState('')
+  const [savingName, setSavingName] = useState(false)
+  const [shieldSavingTeamId, setShieldSavingTeamId] = useState(null)
 
   const setEditingMatchIdSafe = (id) => {
     setMatchScoreInlineError(null)
@@ -123,7 +131,12 @@ export default function LeagueAdmin() {
   }
 
   const handleRemoveReglamentoLeague = async () => {
-    if (!window.confirm('¿Quitar el reglamento publicado?')) return
+    if (!(await confirm({
+      title: 'Quitar reglamento',
+      message: '¿Quitar el reglamento publicado?',
+      confirmLabel: 'Quitar',
+      variant: 'warning',
+    }))) return
     setReglamentoSaving(true)
     setError(null)
     try {
@@ -135,6 +148,77 @@ export default function LeagueAdmin() {
       setError(err.message)
     } finally {
       setReglamentoSaving(false)
+    }
+  }
+
+  const handleStartEditName = () => {
+    setEditNameValue(tournament?.name || '')
+    setEditingName(true)
+  }
+
+  const handleSaveName = async (e) => {
+    if (e) e.preventDefault()
+    const name = editNameValue.trim()
+    if (!name) return
+    setSavingName(true)
+    setError(null)
+    try {
+      const updated = await tournamentApi.updateTournament(tournamentId, { name })
+      setTournament(updated)
+      setEditingName(false)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  const validateShieldFile = (file) => {
+    if (file.size > SHIELD_MAX_BYTES) return 'La imagen no puede superar 2 MB'
+    const okType =
+      file.type.startsWith('image/') ||
+      /\.(png|jpe?g|webp|gif)$/i.test(file.name)
+    if (!okType) return 'Solo se permiten imágenes PNG, JPG, WebP o GIF'
+    return null
+  }
+
+  const handleShieldUpload = async (teamId, e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const validationError = validateShieldFile(file)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+    setShieldSavingTeamId(teamId)
+    setError(null)
+    try {
+      const updated = await api.uploadTeamShield(tournamentId, teamId, file)
+      setTeams((prev) => prev.map((t) => (t.id === teamId ? { ...t, ...updated } : t)))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setShieldSavingTeamId(null)
+    }
+  }
+
+  const handleClearShield = async (teamId) => {
+    if (!(await confirm({
+      title: 'Quitar logo',
+      message: '¿Quitar el logo del equipo?',
+      confirmLabel: 'Quitar',
+      variant: 'warning',
+    }))) return
+    setShieldSavingTeamId(teamId)
+    setError(null)
+    try {
+      const updated = await api.clearTeamShield(tournamentId, teamId)
+      setTeams((prev) => prev.map((t) => (t.id === teamId ? { ...t, ...updated } : t)))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setShieldSavingTeamId(null)
     }
   }
 
@@ -190,6 +274,29 @@ export default function LeagueAdmin() {
   const rosterForTeam = (teamId) => {
     if (teamId == null || teamId === '') return []
     return playersByTeam?.[String(teamId)] ?? playersByTeam?.[teamId] ?? []
+  }
+
+  const mergeGuestIntoRoster = (rosterMap, teamId, player) => {
+    const key = String(teamId)
+    return {
+      ...rosterMap,
+      [key]: [...(rosterMap?.[key] ?? rosterMap?.[teamId] ?? []), player],
+    }
+  }
+
+  const ensureGuestPlayerOnTeam = async (teamId, playerName, rosterMap = playersByTeam) => {
+    const trimmed = String(playerName || '').trim()
+    if (!trimmed || teamId == null || teamId === '') return null
+    const key = String(teamId)
+    const list = rosterMap?.[key] ?? rosterMap?.[teamId] ?? []
+    const normalized = trimmed.toLowerCase()
+    if (list.some((p) => String(p.player_name || '').trim().toLowerCase() === normalized)) {
+      return null
+    }
+    return api.createTeamPlayer(tournamentId, teamId, {
+      player_name: trimmed,
+      role: 'guest',
+    })
   }
 
   const matchGoalsBySide = useMemo(() => {
@@ -311,7 +418,12 @@ export default function LeagueAdmin() {
     const msg = tournament?.sport === 'padel'
       ? '¿Eliminar este grupo? Las parejas quedarán sin grupo asignado.'
       : '¿Eliminar esta zona? Los equipos quedarán sin zona asignada.'
-    if (!window.confirm(msg)) return
+    if (!(await confirm({
+      title: tournament?.sport === 'padel' ? 'Eliminar grupo' : 'Eliminar zona',
+      message: msg,
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    }))) return
     try {
       await api.deleteZone(tournamentId, zoneId)
       loadAll()
@@ -327,7 +439,12 @@ export default function LeagueAdmin() {
       setError('El número de zonas debe estar entre 1 y la cantidad de equipos.')
       return
     }
-    if (!window.confirm(`¿Crear ${num} zona(s) y sortear los ${teams.length} equipos al azar? Se reemplazarán las zonas actuales.`)) return
+    if (!(await confirm({
+      title: 'Sortear zonas',
+      message: `¿Crear ${num} zona(s) y sortear los ${teams.length} equipos al azar? Se reemplazarán las zonas actuales.`,
+      confirmLabel: 'Sortear',
+      variant: 'warning',
+    }))) return
     setDrawZonesLoading(true)
     setError(null)
     try {
@@ -473,9 +590,15 @@ export default function LeagueAdmin() {
     setGoalsCardsActionError(null)
     setSaving(true)
     try {
+      const playerName = goalForm.player_name.trim()
+      const teamId = goalForm.team_id
+      const createdGuest = await ensureGuestPlayerOnTeam(teamId, playerName, playersByTeam)
+      if (createdGuest) {
+        setPlayersByTeam((prev) => mergeGuestIntoRoster(prev, teamId, createdGuest))
+      }
       await api.addGoal(tournamentId, editingMatchForGoals.id, {
-        player_name: goalForm.player_name.trim(),
-        team_id: goalForm.team_id,
+        player_name: playerName,
+        team_id: teamId,
         goals: goalForm.goals ? Number(goalForm.goals) : 1,
       })
       const [goals] = await Promise.all([api.getGoals(tournamentId, editingMatchForGoals.id)])
@@ -504,28 +627,36 @@ export default function LeagueAdmin() {
 
   const handleAddCard = async (e) => {
     e.preventDefault()
-    if (!editingMatchForGoals?.id || !cardForm.player_name || !cardForm.team_id) return
-    const cr = validateCardAddition({
-      cards: matchCards,
-      playersByTeam,
-      homeTeamId: editingMatchForGoals.home_team_id,
-      awayTeamId: editingMatchForGoals.away_team_id,
-      newCard: {
-        player_name: cardForm.player_name.trim(),
-        team_id: cardForm.team_id,
-        card_type: cardForm.card_type,
-      },
-    })
-    if (!cr.ok) {
-      setGoalsCardsActionError(cr.message)
-      return
-    }
+    if (!editingMatchForGoals?.id || !cardForm.player_name?.trim() || !cardForm.team_id) return
     setGoalsCardsActionError(null)
     setSaving(true)
     try {
+      const playerName = cardForm.player_name.trim()
+      const teamId = cardForm.team_id
+      let rosterSnapshot = playersByTeam
+      const createdGuest = await ensureGuestPlayerOnTeam(teamId, playerName, rosterSnapshot)
+      if (createdGuest) {
+        rosterSnapshot = mergeGuestIntoRoster(rosterSnapshot, teamId, createdGuest)
+        setPlayersByTeam(rosterSnapshot)
+      }
+      const cr = validateCardAddition({
+        cards: matchCards,
+        playersByTeam: rosterSnapshot,
+        homeTeamId: editingMatchForGoals.home_team_id,
+        awayTeamId: editingMatchForGoals.away_team_id,
+        newCard: {
+          player_name: playerName,
+          team_id: teamId,
+          card_type: cardForm.card_type,
+        },
+      })
+      if (!cr.ok) {
+        setGoalsCardsActionError(cr.message)
+        return
+      }
       await api.addCard(tournamentId, editingMatchForGoals.id, {
-        player_name: cardForm.player_name.trim(),
-        team_id: cardForm.team_id,
+        player_name: playerName,
+        team_id: teamId,
         card_type: cardForm.card_type,
         suspension_dates: cardForm.card_type === 'red' ? (cardForm.suspension_dates ?? 1) : undefined,
       })
@@ -578,7 +709,12 @@ export default function LeagueAdmin() {
   }
 
   const handleDeleteTeam = async (teamId) => {
-    if (!window.confirm('¿Eliminar este equipo?')) return
+    if (!(await confirm({
+      title: isPadel ? 'Eliminar pareja' : 'Eliminar equipo',
+      message: isPadel ? '¿Eliminar esta pareja?' : '¿Eliminar este equipo?',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    }))) return
     try {
       await api.deleteTeam(tournamentId, teamId)
       loadAll()
@@ -606,7 +742,12 @@ export default function LeagueAdmin() {
       setError('Necesitás al menos 2 equipos para generar el fixture.')
       return
     }
-    if (!window.confirm(`¿Generar fixture todos contra todos?${config.round_trip ? ' (ida y vuelta)' : ' (solo ida)'} Las jornadas existentes se conservan; solo se crearán las faltantes.`)) return
+    if (!(await confirm({
+      title: 'Generar fixture',
+      message: `¿Generar fixture todos contra todos?${config.round_trip ? ' (ida y vuelta)' : ' (solo ida)'} Las jornadas existentes se conservan; solo se crearán las faltantes.`,
+      confirmLabel: 'Generar',
+      variant: 'warning',
+    }))) return
     setFixtureGenerating(true)
     setError(null)
     try {
@@ -646,7 +787,12 @@ export default function LeagueAdmin() {
       setError('Activá la fase final en Configuración antes de generarla.')
       return
     }
-    if (!window.confirm('¿Generar fase final? Se dividirá la tabla en dos grupos (mitad superior e inferior) y cada uno jugará una mini-liga todos contra todos.')) return
+    if (!(await confirm({
+      title: 'Generar fase final',
+      message: '¿Generar fase final? Se dividirá la tabla en dos grupos (mitad superior e inferior) y cada uno jugará una mini-liga todos contra todos.',
+      confirmLabel: 'Generar',
+      variant: 'warning',
+    }))) return
     setPhaseFinalGenerating(true)
     setError(null)
     try {
@@ -666,7 +812,12 @@ export default function LeagueAdmin() {
       setError('Necesitás zonas (grupos) para generar playoffs.')
       return
     }
-    if (!window.confirm('¿Generar cuadro de playoffs? Clasificarán los 2 primeros de cada grupo. Se reemplazará cualquier playoff anterior.')) return
+    if (!(await confirm({
+      title: 'Generar playoffs',
+      message: '¿Generar cuadro de playoffs? Clasificarán los 2 primeros de cada grupo. Se reemplazará cualquier playoff anterior.',
+      confirmLabel: 'Generar',
+      variant: 'warning',
+    }))) return
     setPlayoffGenerating(true)
     setError(null)
     try {
@@ -776,7 +927,12 @@ export default function LeagueAdmin() {
   }
 
   const handleDeleteMatchday = async (md) => {
-    if (!window.confirm(`¿Eliminar la jornada ${md.number} y todos sus partidos? Esta acción no se puede deshacer.`)) return
+    if (!(await confirm({
+      title: 'Eliminar jornada',
+      message: `¿Eliminar la jornada ${md.number} y todos sus partidos? Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    }))) return
     setSaving(true)
     setError(null)
     try {
@@ -790,7 +946,12 @@ export default function LeagueAdmin() {
   }
 
   const handleDeleteMatch = async (matchId, matchdayId) => {
-    if (!window.confirm('¿Eliminar este partido? También se borran goles y tarjetas cargados en ese partido.')) return
+    if (!(await confirm({
+      title: 'Eliminar partido',
+      message: '¿Eliminar este partido? También se borran goles y tarjetas cargados en ese partido.',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    }))) return
     setSaving(true)
     setError(null)
     try {
@@ -893,25 +1054,50 @@ export default function LeagueAdmin() {
 
       <Container className="py-3 py-md-4 px-3 px-md-0">
         <div className="league-header">
-          <div className="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-start justify-content-between gap-2 gap-sm-3">
-            <div className="min-w-0 flex-grow-1">
-              <h1>{tournament.name}</h1>
-              <p className="subtitle mb-0">{adminLabel} · {teamsLabel}, {rosterLabel.toLowerCase()}, fixture y resultados</p>
-            </div>
-            {tournament.reglamento_url && (
-              <Button
-                as="a"
-                variant="outline-primary"
-                size="sm"
-                className="flex-shrink-0 align-self-start league-header-reglamento-btn"
-                href={reglamentoPublicHref(tournament.reglamento_url)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Reglamento
+          {editingName ? (
+            <Form onSubmit={handleSaveName} className="d-flex align-items-center gap-2 flex-wrap w-100 mb-2">
+              <Form.Control
+                type="text"
+                value={editNameValue}
+                onChange={(e) => setEditNameValue(e.target.value)}
+                placeholder="Nombre del torneo"
+                className="form-control-lg flex-grow-1"
+                style={{ maxWidth: '320px', minWidth: '0' }}
+                autoFocus
+              />
+              <Button type="submit" variant="primary" size="sm" disabled={savingName || !editNameValue.trim()}>
+                {savingName ? <Spinner animation="border" size="sm" /> : 'Guardar'}
               </Button>
-            )}
-          </div>
+              <Button type="button" variant="outline-secondary" size="sm" onClick={() => setEditingName(false)} disabled={savingName}>
+                Cancelar
+              </Button>
+            </Form>
+          ) : (
+            <div className="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-start justify-content-between gap-2 gap-sm-3">
+              <div className="min-w-0 flex-grow-1">
+                <h1>{tournament.name}</h1>
+                <p className="subtitle mb-0">{adminLabel} · {teamsLabel}, {rosterLabel.toLowerCase()}, fixture y resultados</p>
+              </div>
+              {tournament.reglamento_url && (
+                <Button
+                  as="a"
+                  variant="outline-primary"
+                  size="sm"
+                  className="flex-shrink-0 align-self-start league-header-reglamento-btn"
+                  href={reglamentoPublicHref(tournament.reglamento_url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Reglamento
+                </Button>
+              )}
+            </div>
+          )}
+          {!editingName && (
+            <Button variant="outline-secondary" size="sm" onClick={handleStartEditName} className="align-self-start mt-2">
+              Editar nombre
+            </Button>
+          )}
         </div>
 
         <Card className="mb-3 shadow-sm">
@@ -1052,14 +1238,54 @@ export default function LeagueAdmin() {
                   ) : (
                     <Table responsive hover className="mb-0">
                       <thead className="table-light">
-                        <tr><th>Nombre</th><th>{zoneLabel}</th><th>Escudo</th><th>{rosterLabel}</th><th></th></tr>
+                        <tr><th>Nombre</th><th>{zoneLabel}</th><th>Logo</th><th>{rosterLabel}</th><th></th></tr>
                       </thead>
                       <tbody>
                         {teams.map((t) => (
                           <tr key={t.id}>
                             <td className="fw-medium">{t.name}</td>
                             <td><span className="text-muted">{t.zone_name || '—'}</span></td>
-                            <td>{t.shield_url ? <a href={t.shield_url} target="_blank" rel="noreferrer" className="small">Ver</a> : '—'}</td>
+                            <td>
+                              <div className="d-flex align-items-center gap-2 flex-wrap">
+                                {t.shield_url && (
+                                  <img
+                                    src={t.shield_url}
+                                    alt=""
+                                    style={{ width: 32, height: 32, objectFit: 'contain' }}
+                                  />
+                                )}
+                                <input
+                                  type="file"
+                                  id={`shield-${t.id}`}
+                                  className="d-none"
+                                  accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
+                                  disabled={shieldSavingTeamId === t.id}
+                                  onChange={(e) => handleShieldUpload(t.id, e)}
+                                />
+                                <Button
+                                  as="label"
+                                  htmlFor={`shield-${t.id}`}
+                                  variant="outline-secondary"
+                                  size="sm"
+                                  className="mb-0"
+                                  disabled={shieldSavingTeamId === t.id}
+                                >
+                                  {t.shield_url ? 'Cambiar logo' : 'Cargar logo'}
+                                </Button>
+                                {t.shield_url && (
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="p-0 text-danger text-decoration-none"
+                                    disabled={shieldSavingTeamId === t.id}
+                                    onClick={() => handleClearShield(t.id)}
+                                  >
+                                    Quitar
+                                  </Button>
+                                )}
+                                {shieldSavingTeamId === t.id && <Spinner animation="border" size="sm" />}
+                              </div>
+                            </td>
                             <td>
                               <Button variant="link" size="sm" className="p-0 text-decoration-none" onClick={() => openPlayersModal(t)}>
                                 {rosterLabel}
@@ -1336,7 +1562,7 @@ export default function LeagueAdmin() {
             {!isPadel && (
             <Tab eventKey="scorers" title="Goleadores">
               <Card>
-                <Card.Header className="fw-bold">Tabla de goleadores</Card.Header>
+                <Card.Header className="fw-bold">Tabla de goleadores — Top 10</Card.Header>
                 <Card.Body className="p-0">
                   {scorers.length === 0 ? (
                     <div className="league-empty"><div className="league-empty-icon">⚽</div><p className="mb-0">Sin goles cargados. Agregá goles desde cada partido (Goles y tarjetas).</p></div>
@@ -1685,10 +1911,7 @@ export default function LeagueAdmin() {
                   </Form.Select>
                 </Form.Group>
               )}
-              <Form.Group className="mb-3">
-                <Form.Label>URL del escudo (opcional)</Form.Label>
-                <Form.Control value={teamForm.shield_url} onChange={(e) => setTeamForm((f) => ({ ...f, shield_url: e.target.value }))} placeholder="https://..." />
-              </Form.Group>
+              <p className="small text-muted mb-0">Podés cargar el logo del equipo desde la tabla después de crearlo.</p>
             </Modal.Body>
             <Modal.Footer>
               <Button variant="secondary" onClick={() => setShowTeamModal(false)} disabled={saving}>Cancelar</Button>
@@ -1882,34 +2105,13 @@ export default function LeagueAdmin() {
                 ))}
               </Form.Select>
               {goalForm.team_id && (
-                rosterForTeam(goalForm.team_id).length > 0 ? (
-                  <Form.Select
-                    aria-label="Jugador"
-                    value={goalForm.player_name}
-                    onChange={(e) => setGoalForm((f) => ({ ...f, player_name: e.target.value }))}
-                    style={{ width: 220 }}
-                    required
-                  >
-                    <option value="">Seleccionar jugador</option>
-                    {rosterForTeam(goalForm.team_id).map((p) => {
-                      const key = `${p.player_name}::${goalForm.team_id}`
-                      const suspended = suspendedPlayersSet.has(key)
-                      return (
-                        <option key={p.id} value={p.player_name} disabled={suspended}>
-                          {p.shirt_number ? `${p.shirt_number}. ` : ''}{p.player_name}{suspended ? ' (Suspendido)' : ''}
-                        </option>
-                      )
-                    })}
-                  </Form.Select>
-                ) : (
-                  <Form.Control
-                    aria-label="Nombre del jugador"
-                    placeholder="Jugador (cargar plantel en Equipos)"
-                    value={goalForm.player_name}
-                    onChange={(e) => setGoalForm((f) => ({ ...f, player_name: e.target.value }))}
-                    style={{ width: 220 }}
-                  />
-                )
+                <MatchPlayerCombobox
+                  value={goalForm.player_name}
+                  onChange={(player_name) => setGoalForm((f) => ({ ...f, player_name }))}
+                  roster={rosterForTeam(goalForm.team_id)}
+                  teamId={goalForm.team_id}
+                  suspendedSet={suspendedPlayersSet}
+                />
               )}
               <Form.Control
                 type="number"
@@ -1967,30 +2169,13 @@ export default function LeagueAdmin() {
                 ))}
               </Form.Select>
               {cardForm.team_id && (
-                rosterForTeam(cardForm.team_id).length > 0 ? (
-                  <Form.Select
-                    aria-label="Jugador"
-                    value={cardForm.player_name}
-                    onChange={(e) => setCardForm((f) => ({ ...f, player_name: e.target.value }))}
-                    style={{ width: 220 }}
-                    required
-                  >
-                    <option value="">Seleccionar jugador</option>
-                    {rosterForTeam(cardForm.team_id).map((p) => {
-                      const key = `${p.player_name}::${cardForm.team_id}`
-                      const suspended = suspendedPlayersSet.has(key)
-                      return (
-                        <option key={p.id} value={p.player_name} disabled={suspended}>
-                          {p.shirt_number ? `${p.shirt_number}. ` : ''}{p.player_name}{suspended ? ' (Suspendido)' : ''}
-                        </option>
-                      )
-                    })}
-                  </Form.Select>
-                ) : (
-                  <span className="text-muted small" style={{ alignSelf: 'center' }}>
-                    Cargar plantel del equipo primero
-                  </span>
-                )
+                <MatchPlayerCombobox
+                  value={cardForm.player_name}
+                  onChange={(player_name) => setCardForm((f) => ({ ...f, player_name }))}
+                  roster={rosterForTeam(cardForm.team_id)}
+                  teamId={cardForm.team_id}
+                  suspendedSet={suspendedPlayersSet}
+                />
               )}
               <Form.Select
                 value={cardForm.card_type}
@@ -2144,6 +2329,7 @@ export default function LeagueAdmin() {
             </Modal.Footer>
           </Form>
         </Modal>
+        <ConfirmDialog />
       </Container>
     </div>
   )
