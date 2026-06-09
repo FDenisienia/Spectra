@@ -118,10 +118,11 @@
 }
 
 .league-fecha-match__row {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: center;
+  gap: 0.5rem 0.75rem;
 }
 
 .league-fecha-match__team {
@@ -129,6 +130,8 @@
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+  flex: 0 1 auto;
+  max-width: 42%;
 }
 
 .league-fecha-match__team--home {
@@ -139,11 +142,16 @@
 .league-fecha-match__team--away {
   justify-content: flex-start;
   text-align: left;
+  flex-direction: row-reverse;
 }
 
 .league-fecha-match__name {
   font-weight: 500;
   word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .league-team-shield {
@@ -174,7 +182,7 @@
   font-size: 0.9375rem;
   color: #64748b;
   white-space: nowrap;
-  min-width: 3rem;
+  flex: 0 0 auto;
   text-align: center;
 }
 
@@ -188,21 +196,42 @@
 }
 
 @media (max-width: 575.98px) {
-  .league-fecha-match__row {
-    grid-template-columns: 1fr;
-    gap: 0.35rem;
-    text-align: center;
+  .league-fecha-match {
+    padding: 0.75rem 0.65rem;
   }
 
-  .league-fecha-match__team,
-  .league-fecha-match__team--home,
-  .league-fecha-match__team--away {
-    justify-content: center;
-    text-align: center;
+  .league-fecha-match__row {
+    gap: 0.35rem 0.5rem;
+  }
+
+  .league-fecha-match__team {
+    gap: 0.35rem;
+    max-width: 38%;
+  }
+
+  .league-fecha-match__name {
+    font-size: 0.8125rem;
+  }
+
+  .league-fecha-match .league-team-shield {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 0.75rem !important;
   }
 
   .league-fecha-match__score {
-    order: -1;
+    font-size: 0.875rem;
+    line-height: 1.2;
+  }
+
+  .league-current-matchday-card .card-header .d-flex.flex-wrap {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+
+  .league-current-matchday-card .card-header .league-card-header-zone {
+    margin-left: 0 !important;
   }
 }
 

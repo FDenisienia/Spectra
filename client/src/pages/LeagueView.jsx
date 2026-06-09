@@ -282,8 +282,8 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
                                       {played ? score : 'vs'}
                                     </div>
                                     <div className="league-fecha-match__team league-fecha-match__team--away">
-                                      <span className="league-fecha-match__name">{m.away_team_name}</span>
                                       <TeamShield url={m.away_shield} name={m.away_team_name} size={36} />
+                                      <span className="league-fecha-match__name">{m.away_team_name}</span>
                                     </div>
                                   </div>
                                   {m.played_at && (
