@@ -1035,24 +1035,56 @@ export async function deleteCard(cardId) {
 }
 
 // --- Current matchday ---
+/**
+ * Determina la jornada actual según el progreso real del torneo.
+ * - Partidos postergados no bloquean el avance.
+ * - Si hay partidos jugados en fechas posteriores, las fechas anteriores quedan superadas.
+ */
+export function resolveCurrentMatchday(matchdayStats) {
+  if (!matchdayStats?.length) return null
+
+  const sorted = [...matchdayStats].sort((a, b) => a.number - b.number)
+  const hasHigherPlayed = (md) =>
+    sorted.some((other) => other.number > md.number && other.played > 0)
+
+  const open = sorted.filter((md) => md.scheduled > 0 && !hasHigherPlayed(md))
+  if (open.length > 0) return open[0]
+
+  const withPlayed = sorted.filter((md) => md.played > 0)
+  if (withPlayed.length > 0) return withPlayed[withPlayed.length - 1]
+
+  return sorted[0]
+}
+
 export async function getCurrentMatchday(tournamentId) {
   const [rows] = await pool.query(
-    `SELECT md.id, md.tournament_id, md.number
+    `SELECT md.id, md.tournament_id, md.number,
+       SUM(CASE WHEN m.status = 'played' THEN 1 ELSE 0 END) AS played,
+       SUM(CASE WHEN m.status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled,
+       SUM(CASE WHEN m.status = 'postponed' THEN 1 ELSE 0 END) AS postponed,
+       COUNT(m.id) AS total
      FROM league_matchdays md
-     LEFT JOIN league_matches m ON m.matchday_id = md.id AND m.status = 'played'
+     LEFT JOIN league_matches m ON m.matchday_id = md.id
      WHERE md.tournament_id = ?
-     GROUP BY md.id, md.number
-     HAVING COUNT(m.id) < (SELECT COUNT(*) FROM league_matches m2 WHERE m2.matchday_id = md.id)
-     ORDER BY md.number ASC
-     LIMIT 1`,
+     GROUP BY md.id, md.tournament_id, md.number
+     ORDER BY md.number ASC`,
     [tournamentId]
   )
-  if (rows.length > 0) return rows[0]
-  const [last] = await pool.query(
-    'SELECT id, tournament_id, number FROM league_matchdays WHERE tournament_id = ? ORDER BY number DESC LIMIT 1',
-    [tournamentId]
-  )
-  return last[0] || null
+  if (rows.length === 0) return null
+
+  const stats = rows.map((r) => ({
+    id: r.id,
+    tournament_id: r.tournament_id,
+    number: r.number,
+    played: Number(r.played),
+    scheduled: Number(r.scheduled),
+    postponed: Number(r.postponed),
+    total: Number(r.total),
+  }))
+
+  const resolved = resolveCurrentMatchday(stats)
+  if (!resolved) return null
+  return { id: resolved.id, tournament_id: resolved.tournament_id, number: resolved.number }
 }
 
 // --- Standings (computed) ---
@@ -1178,9 +1210,20 @@ function headToHead(teamA, teamB, matches, ptsWin, ptsDraw) {
 }
 
 // --- Top scorers ---
-const TOP_SCORERS_LIMIT = 10
+export const LANDING_SCORERS_LIMIT = 10
+const TEAM_SCORERS_LIMIT = 10
 
-export async function getScorers(tournamentId, { zoneId = null } = {}) {
+function mapScorerRows(rows, offset = 0) {
+  return rows.map((r, i) => ({
+    position: offset + i + 1,
+    player_name: r.player_name,
+    team_name: r.team_name,
+    team_id: r.team_id,
+    goals: Number(r.goals),
+  }))
+}
+
+function scorersBaseSql(tournamentId, { zoneId = null } = {}) {
   let sql = `SELECT g.player_name, g.team_id, t.name AS team_name, SUM(COALESCE(g.goals, 1)) AS goals
      FROM league_goals g
      JOIN league_matches m ON g.match_id = m.id
@@ -1192,14 +1235,68 @@ export async function getScorers(tournamentId, { zoneId = null } = {}) {
     sql += ' AND (m.zone_id = ? OR (m.zone_id IS NULL AND t.zone_id = ?))'
     params.push(zoneId, zoneId)
   }
-  sql += ' GROUP BY g.player_name, g.team_id, t.name ORDER BY goals DESC, g.player_name LIMIT ?'
-  params.push(TOP_SCORERS_LIMIT)
-  const [rows] = await pool.query(sql, params)
-  return rows.map((r, i) => ({ position: i + 1, player_name: r.player_name, team_name: r.team_name, team_id: r.team_id, goals: Number(r.goals) }))
+  sql += ' GROUP BY g.player_name, g.team_id, t.name'
+  return { sql, params }
+}
+
+export async function countScorers(tournamentId, { zoneId = null } = {}) {
+  const { sql, params } = scorersBaseSql(tournamentId, { zoneId })
+  const [rows] = await pool.query(`SELECT COUNT(*) AS total FROM (${sql}) scorers`, params)
+  return Number(rows[0]?.total ?? 0)
+}
+
+export async function getScorers(tournamentId, { zoneId = null, limit = null, offset = 0 } = {}) {
+  const { sql, params } = scorersBaseSql(tournamentId, { zoneId })
+  let query = `${sql} ORDER BY goals DESC, g.player_name`
+  const queryParams = [...params]
+  if (limit != null) {
+    query += ' LIMIT ? OFFSET ?'
+    queryParams.push(limit, offset)
+  }
+  const [rows] = await pool.query(query, queryParams)
+  return mapScorerRows(rows, offset)
+}
+
+export async function getScorersPaginated(tournamentId, { zoneId = null, page = 1, pageSize = 25 } = {}) {
+  const safePage = Math.max(1, Number(page) || 1)
+  const safePageSize = Math.min(100, Math.max(1, Number(pageSize) || 25))
+  const total = await countScorers(tournamentId, { zoneId })
+  const offset = (safePage - 1) * safePageSize
+  const items = await getScorers(tournamentId, { zoneId, limit: safePageSize, offset })
+  return {
+    items,
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+    totalPages: total > 0 ? Math.ceil(total / safePageSize) : 0,
+  }
+}
+
+async function mergeScorersLists(fromGroup, playoffRows) {
+  const combined = {}
+  for (const r of fromGroup) {
+    const key = `${r.player_name}-${r.team_id}`
+    combined[key] = { ...r, goals: Number(r.goals) }
+  }
+  for (const r of playoffRows) {
+    const key = `${r.player_name}-${r.team_id}`
+    if (!combined[key]) {
+      combined[key] = {
+        player_name: r.player_name,
+        team_id: r.team_id,
+        team_name: r.team_name,
+        goals: 0,
+      }
+    }
+    combined[key].goals += Number(r.goals)
+  }
+  return Object.values(combined).sort(
+    (a, b) => b.goals - a.goals || (a.player_name || '').localeCompare(b.player_name || '')
+  )
 }
 
 /** Goleadores incluyendo fase de grupos + playoffs */
-export async function getScorersGlobal(tournamentId, { zoneId = null } = {}) {
+export async function getScorersGlobal(tournamentId, { zoneId = null, limit = null, offset = 0 } = {}) {
   const fromGroup = await getScorers(tournamentId, { zoneId })
   const [playoffRows] = await pool.query(
     `SELECT g.player_name, g.team_id, t.name AS team_name, SUM(COALESCE(g.goals, 1)) AS goals
@@ -1211,18 +1308,48 @@ export async function getScorersGlobal(tournamentId, { zoneId = null } = {}) {
      GROUP BY g.player_name, g.team_id, t.name`,
     [tournamentId]
   )
-  const combined = {}
-  for (const r of fromGroup) {
-    const key = `${r.player_name}-${r.team_id}`
-    combined[key] = { ...r, goals: Number(r.goals) }
+  const list = await mergeScorersLists(fromGroup, playoffRows)
+  const slice = limit != null ? list.slice(offset, offset + limit) : list.slice(offset)
+  return slice.map((r, i) => ({
+    position: offset + i + 1,
+    player_name: r.player_name,
+    team_name: r.team_name,
+    team_id: r.team_id,
+    goals: r.goals,
+  }))
+}
+
+export async function getScorersGlobalPaginated(tournamentId, { zoneId = null, page = 1, pageSize = 25 } = {}) {
+  const safePage = Math.max(1, Number(page) || 1)
+  const safePageSize = Math.min(100, Math.max(1, Number(pageSize) || 25))
+  const fromGroup = await getScorers(tournamentId, { zoneId })
+  const [playoffRows] = await pool.query(
+    `SELECT g.player_name, g.team_id, t.name AS team_name, SUM(COALESCE(g.goals, 1)) AS goals
+     FROM league_playoff_goals g
+     JOIN league_playoff_matches pm ON g.playoff_match_id = pm.id
+     JOIN league_playoff_rounds pr ON pm.round_id = pr.id
+     JOIN league_teams t ON g.team_id = t.id
+     WHERE pr.tournament_id = ?
+     GROUP BY g.player_name, g.team_id, t.name`,
+    [tournamentId]
+  )
+  const list = await mergeScorersLists(fromGroup, playoffRows)
+  const total = list.length
+  const offset = (safePage - 1) * safePageSize
+  const items = list.slice(offset, offset + safePageSize).map((r, i) => ({
+    position: offset + i + 1,
+    player_name: r.player_name,
+    team_name: r.team_name,
+    team_id: r.team_id,
+    goals: r.goals,
+  }))
+  return {
+    items,
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+    totalPages: total > 0 ? Math.ceil(total / safePageSize) : 0,
   }
-  for (const r of playoffRows) {
-    const key = `${r.player_name}-${r.team_id}`
-    if (!combined[key]) combined[key] = { player_name: r.player_name, team_id: r.team_id, team_name: r.team_name, goals: 0 }
-    combined[key].goals += Number(r.goals)
-  }
-  const list = Object.values(combined).sort((a, b) => b.goals - a.goals || (a.player_name || '').localeCompare(b.player_name || ''))
-  return list.slice(0, TOP_SCORERS_LIMIT).map((r, i) => ({ position: i + 1, player_name: r.player_name, team_name: r.team_name, team_id: r.team_id, goals: r.goals }))
 }
 
 // --- Discipline (cards by player) ---
@@ -1297,7 +1424,7 @@ export async function getScorersByTeam(tournamentId, teamId) {
      JOIN league_teams t ON g.team_id = t.id
      WHERE md.tournament_id = ? AND g.team_id = ?
      GROUP BY g.player_name, g.team_id, t.name ORDER BY goals DESC, g.player_name LIMIT ?`,
-    [tournamentId, teamId, TOP_SCORERS_LIMIT]
+    [tournamentId, teamId, TEAM_SCORERS_LIMIT]
   )
   return rows.map((r, i) => ({
     position: i + 1,

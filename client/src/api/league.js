@@ -304,9 +304,22 @@ export async function getStandings(tournamentId, { zoneId, phase_final_group } =
   return res.json()
 }
 
-export async function getScorers(tournamentId, { zoneId } = {}) {
-  const url = zoneId ? `${base(tournamentId)}/scorers?zone_id=${encodeURIComponent(zoneId)}` : `${base(tournamentId)}/scorers`
+export async function getScorers(tournamentId, { zoneId, limit } = {}) {
+  const params = new URLSearchParams()
+  if (zoneId) params.set('zone_id', zoneId)
+  if (limit != null) params.set('limit', String(limit))
+  const qs = params.toString()
+  const url = `${base(tournamentId)}/scorers${qs ? `?${qs}` : ''}`
   const res = await fetch(url)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** Listado paginado de goleadores (panel administrativo). */
+export async function getScorersPaginated(tournamentId, { zoneId, page = 1, pageSize = 25 } = {}) {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+  if (zoneId) params.set('zone_id', zoneId)
+  const res = await fetch(`${base(tournamentId)}/scorers?${params.toString()}`)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }

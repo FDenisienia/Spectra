@@ -55,7 +55,7 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
     if (zones.length === 0) {
       Promise.all([
         api.getStandings(tournamentId),
-        api.getScorers(tournamentId),
+        api.getScorers(tournamentId, { limit: 10 }),
       ])
         .then(([standings, scorers]) => {
           setStandingsByZone({ _single: standings || [] })
@@ -66,7 +66,7 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
       Promise.all(zones.map((z) =>
         Promise.all([
           api.getStandings(tournamentId, { zoneId: z.id }),
-          api.getScorers(tournamentId, { zoneId: z.id }),
+          api.getScorers(tournamentId, { zoneId: z.id, limit: 10 }),
         ]).then(([standings, scorers]) => ({ zoneId: z.id, standings: standings || [], scorers: scorers || [] }))
       ))
         .then((results) => {
@@ -259,7 +259,7 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
                         </div>
                         {tournament.status !== 'finished' && (
                           <p className="league-current-matchday__hint mb-0 mt-2 fw-normal">
-                            Permanece activa hasta que se jueguen todos los partidos de esta fecha.
+                            Refleja el progreso real del torneo. Los partidos postergados no bloquean el avance de fecha.
                           </p>
                         )}
                       </Card.Header>

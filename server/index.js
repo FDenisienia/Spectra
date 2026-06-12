@@ -985,7 +985,22 @@ app.get('/api/tournament/:id/league/scorers', async (req, res) => {
     if (!isLeagueTournament(t)) return res.status(400).json({ error: 'Torneo no es de liga' })
     const zoneId = req.query.zone_id || null
     const global = req.query.global === '1' || req.query.global === 'true'
-    const scorers = global ? await leagueRepo.getScorersGlobal(req.params.id, { zoneId }) : await leagueRepo.getScorers(req.params.id, { zoneId })
+    const page = req.query.page != null ? Number(req.query.page) : null
+    const pageSize = req.query.page_size != null ? Number(req.query.page_size) : null
+    const limit = req.query.limit != null ? Number(req.query.limit) : null
+
+    if (page != null) {
+      const result = global
+        ? await leagueRepo.getScorersGlobalPaginated(req.params.id, { zoneId, page, pageSize: pageSize ?? 25 })
+        : await leagueRepo.getScorersPaginated(req.params.id, { zoneId, page, pageSize: pageSize ?? 25 })
+      return res.json(result)
+    }
+
+    const options = { zoneId }
+    if (limit != null) options.limit = limit
+    const scorers = global
+      ? await leagueRepo.getScorersGlobal(req.params.id, options)
+      : await leagueRepo.getScorers(req.params.id, options)
     res.json(scorers)
   } catch (e) {
     res.status(500).json({ error: e.message })

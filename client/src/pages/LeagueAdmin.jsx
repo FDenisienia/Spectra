@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Container, Navbar, Nav, Card, Table, Button, Spinner, Alert, Modal, Form, Tabs, Tab, Row, Col } from 'react-bootstrap'
+import { Container, Navbar, Nav, Card, Table, Button, Spinner, Alert, Modal, Form, Tabs, Tab, Row, Col, Pagination } from 'react-bootstrap'
 import * as api from '../api/league'
 import { playedAtToDatetimeLocal } from '../utils/matchDateTime'
 import * as tournamentApi from '../api/tournament'
@@ -51,6 +51,11 @@ export default function LeagueAdmin() {
   const [showZoneModal, setShowZoneModal] = useState(false)
   const [zoneForm, setZoneForm] = useState({ name: '', sort_order: 0 })
   const [scorers, setScorers] = useState([])
+  const [scorersPage, setScorersPage] = useState(1)
+  const [scorersTotal, setScorersTotal] = useState(0)
+  const [scorersTotalPages, setScorersTotalPages] = useState(0)
+  const [scorersLoading, setScorersLoading] = useState(false)
+  const SCORERS_PAGE_SIZE = 25
   const [discipline, setDiscipline] = useState([])
   const [suspensions, setSuspensions] = useState([])
   const [disciplineHistory, setDisciplineHistory] = useState([])
@@ -337,7 +342,6 @@ export default function LeagueAdmin() {
           api.getMatchdays(tournamentId),
           api.getConfig(tournamentId),
           api.getZones(tournamentId),
-          api.getScorers(tournamentId),
           api.getDiscipline(tournamentId),
           api.getPlayoffBracket(tournamentId).catch(() => []),
           api.getSuspensions(tournamentId).catch(() => []),
@@ -345,12 +349,11 @@ export default function LeagueAdmin() {
         ])
       .then((data) => {
         if (!data) return
-        const [te, mds, cfg, z, sc, disc, playoff, susp, discHist] = data
+        const [te, mds, cfg, z, disc, playoff, susp, discHist] = data
         setTeams(te || [])
         setMatchdays(mds || [])
         setConfig(cfg || { points_win: 3, points_draw: 1, points_loss: 0, round_trip: false, fase_final_activa: false, odd_team_to: 'upper' })
         setZones(z || [])
-        setScorers(sc || [])
         setDiscipline(disc || [])
         setPlayoffBracket(Array.isArray(playoff) ? playoff : [])
         setSuspensions(Array.isArray(susp) ? susp : [])
@@ -390,6 +393,29 @@ export default function LeagueAdmin() {
   useEffect(() => {
     loadAll()
   }, [tournamentId])
+
+  const loadScorers = (page = scorersPage) => {
+    if (!tournamentId) return
+    setScorersLoading(true)
+    api.getScorersPaginated(tournamentId, { page, pageSize: SCORERS_PAGE_SIZE })
+      .then((result) => {
+        setScorers(result.items || [])
+        setScorersTotal(result.total ?? 0)
+        setScorersTotalPages(result.totalPages ?? 0)
+        setScorersPage(result.page ?? page)
+      })
+      .catch(() => {
+        setScorers([])
+        setScorersTotal(0)
+        setScorersTotalPages(0)
+      })
+      .finally(() => setScorersLoading(false))
+  }
+
+  useEffect(() => {
+    if (!tournamentId || loading) return
+    loadScorers(scorersPage)
+  }, [tournamentId, scorersPage, loading])
 
   const loadMatchdayMatches = (matchdayId) => {
     if (!tournamentId || !matchdayId) return
@@ -1562,26 +1588,64 @@ export default function LeagueAdmin() {
             {!isPadel && (
             <Tab eventKey="scorers" title="Goleadores">
               <Card>
-                <Card.Header className="fw-bold">Tabla de goleadores — Top 10</Card.Header>
+                <Card.Header className="fw-bold d-flex flex-wrap align-items-center justify-content-between gap-2">
+                  <span>Tabla de goleadores</span>
+                  {scorersTotal > 0 && (
+                    <span className="fw-normal small text-muted">
+                      {scorersTotal} jugador{scorersTotal !== 1 ? 'es' : ''} con goles
+                    </span>
+                  )}
+                </Card.Header>
                 <Card.Body className="p-0">
-                  {scorers.length === 0 ? (
+                  {scorersLoading ? (
+                    <div className="text-center py-4"><Spinner animation="border" size="sm" /></div>
+                  ) : scorers.length === 0 ? (
                     <div className="league-empty"><div className="league-empty-icon">⚽</div><p className="mb-0">Sin goles cargados. Agregá goles desde cada partido (Goles y tarjetas).</p></div>
                   ) : (
-                    <Table responsive hover className="mb-0">
-                      <thead className="table-light">
-                        <tr><th>#</th><th>Jugador</th><th>Equipo</th><th>Goles</th></tr>
-                      </thead>
-                      <tbody>
-                        {scorers.map((row) => (
-                          <tr key={`${row.player_name}-${row.team_id}`}>
-                            <td className="fw-semibold">{row.position}</td>
-                            <td>{row.player_name}</td>
-                            <td>{row.team_name}</td>
-                            <td>{row.goals}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
+                    <>
+                      <Table responsive hover className="mb-0">
+                        <thead className="table-light">
+                          <tr><th>#</th><th>Jugador</th><th>Equipo</th><th>Goles</th></tr>
+                        </thead>
+                        <tbody>
+                          {scorers.map((row) => (
+                            <tr key={`${row.player_name}-${row.team_id}`}>
+                              <td className="fw-semibold">{row.position}</td>
+                              <td>{row.player_name}</td>
+                              <td>{row.team_name}</td>
+                              <td>{row.goals}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                      {scorersTotalPages > 1 && (
+                        <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 border-top">
+                          <span className="small text-muted">
+                            Página {scorersPage} de {scorersTotalPages}
+                          </span>
+                          <Pagination className="mb-0">
+                            <Pagination.Prev
+                              disabled={scorersPage <= 1}
+                              onClick={() => setScorersPage((p) => Math.max(1, p - 1))}
+                            />
+                            {Array.from({ length: scorersTotalPages }, (_, i) => i + 1)
+                              .filter((p) => p === 1 || p === scorersTotalPages || Math.abs(p - scorersPage) <= 1)
+                              .map((p, idx, arr) => (
+                                <span key={p}>
+                                  {idx > 0 && arr[idx - 1] !== p - 1 && <Pagination.Ellipsis disabled />}
+                                  <Pagination.Item active={p === scorersPage} onClick={() => setScorersPage(p)}>
+                                    {p}
+                                  </Pagination.Item>
+                                </span>
+                              ))}
+                            <Pagination.Next
+                              disabled={scorersPage >= scorersTotalPages}
+                              onClick={() => setScorersPage((p) => Math.min(scorersTotalPages, p + 1))}
+                            />
+                          </Pagination>
+                        </div>
+                      )}
+                    </>
                   )}
                 </Card.Body>
               </Card>
