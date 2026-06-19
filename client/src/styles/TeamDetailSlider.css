@@ -326,6 +326,52 @@
   background-color: rgba(255, 193, 7, 0.15);
 }
 
+.team-detail-sanctions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.team-detail-sanctions-item {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.team-detail-sanctions-item:last-child {
+  border-bottom: none;
+}
+
+.team-detail-sanctions-item__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.team-detail-sanctions-item__icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.team-detail-sanctions-item__reason {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-bottom: 0.35rem;
+}
+
+.team-detail-sanctions-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.team-detail-sanctions-item__pending {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #92400e;
+}
+
 .team-detail-list-value {
   font-size: 0.9375rem;
   color: #1e293b;

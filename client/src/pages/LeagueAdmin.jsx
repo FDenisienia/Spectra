@@ -13,6 +13,7 @@ import {
 } from '../utils/matchEventsValidation'
 import { LeagueFixtureMatchRow, LeaguePlayoffFixtureRow } from '../components/league/LeagueFixtureMatchRows'
 import MatchPlayerCombobox from '../components/league/MatchPlayerCombobox'
+import { getTournamentLogoMeta } from '../components/tournament/TournamentLogo'
 import '../styles/League.css'
 import { reglamentoPublicHref } from '../utils/reglamentoUrl'
 import { useConfirm } from '../hooks/useConfirm'
@@ -68,6 +69,7 @@ export default function LeagueAdmin() {
   const [showPlayersModal, setShowPlayersModal] = useState(false)
   const [editingTeamForPlayers, setEditingTeamForPlayers] = useState(null)
   const [teamPlayers, setTeamPlayers] = useState([])
+  const [teamSuspensions, setTeamSuspensions] = useState([])
   const [playerForm, setPlayerForm] = useState({ player_name: '', dni: '', shirt_number: '', role: 'player' })
   const [editingPlayerId, setEditingPlayerId] = useState(null)
   const [editPlayerForm, setEditPlayerForm] = useState({ player_name: '', dni: '', shirt_number: '', role: 'player' })
@@ -487,8 +489,17 @@ export default function LeagueAdmin() {
     setEditingTeamForPlayers(team)
     setPlayerForm({ player_name: '', dni: '', shirt_number: '', role: 'player' })
     setEditingPlayerId(null)
+    setTeamSuspensions([])
     if (!team?.id) return
-    api.getTeamPlayers(tournamentId, team.id).then((list) => setTeamPlayers(list || [])).catch(() => {})
+    Promise.all([
+      api.getTeamPlayers(tournamentId, team.id),
+      api.getSuspensions(tournamentId, { activeOnly: true }).catch(() => []),
+    ]).then(([list, allSuspensions]) => {
+      setTeamPlayers(list || [])
+      setTeamSuspensions(
+        (Array.isArray(allSuspensions) ? allSuspensions : []).filter((s) => s.team_id === team.id && s.is_active)
+      )
+    }).catch(() => {})
     setShowPlayersModal(true)
   }
 
@@ -531,6 +542,12 @@ export default function LeagueAdmin() {
   const roleLabel = (role) => {
     const labels = { captain: 'Capitán', player: 'Jugador', guest: 'Invitado' }
     return labels[role] || 'Jugador'
+  }
+
+  const suspensionIcon = (reason) => {
+    if (reason === 'red_direct') return '🔴'
+    if (reason === 'green_accumulation') return '🟩'
+    return '🟡'
   }
 
   const handleAddPlayer = async (e) => {
@@ -1061,6 +1078,7 @@ export default function LeagueAdmin() {
   const zonesLabel = isPadel ? 'Grupos' : 'Zonas'
   const rosterLabel = isPadel ? 'Integrantes' : 'Plantel'
   const adminLabel = tournament.modality === 'grupo' ? 'Administrar fase de grupos' : 'Administrar liga'
+  const tournamentLogo = getTournamentLogoMeta(tournament.sport, tournament.gender)
   const isLigaFormat = tournament?.modality === 'liga' // Formato Liga: solo tabla, sin playoffs
 
   return (
@@ -1692,7 +1710,7 @@ export default function LeagueAdmin() {
                   ) : (
                     <Table responsive hover className="mb-0">
                       <thead className="table-light">
-                        <tr><th>Jugador</th><th>Equipo</th><th>Motivo</th><th>Fechas</th><th>Estado</th></tr>
+                        <tr><th>Jugador</th><th>Equipo</th><th>Motivo</th><th>Fechas restantes</th><th>Estado</th></tr>
                       </thead>
                       <tbody>
                         {suspensions.map((s) => (
@@ -1700,8 +1718,8 @@ export default function LeagueAdmin() {
                             <td>{s.player_name}</td>
                             <td>{s.team_name}</td>
                             <td>{s.reason_label}</td>
-                            <td>{s.dates_served}/{s.dates_total}</td>
-                            <td>{s.is_active ? <span className="badge bg-warning text-dark">Suspendido</span> : <span className="badge bg-secondary">Cumplida</span>}</td>
+                            <td>{s.is_active ? (s.dates_pending ?? Math.max(0, s.dates_total - s.dates_served)) : '—'}</td>
+                            <td>{s.is_active ? <span className="badge bg-warning text-dark">Activa</span> : <span className="badge bg-secondary">Cumplida</span>}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1990,6 +2008,41 @@ export default function LeagueAdmin() {
           </Modal.Header>
           <Modal.Body>
             <p className="league-players-intro">Cargá los jugadores del equipo para asignarlos en goles y tarjetas.</p>
+            {!isPadel && teamSuspensions.length > 0 && (
+              <div className="team-detail-sanctions league-modal-sanctions mb-3">
+                <div className="team-detail-sanctions-header fw-bold mb-2">
+                  {tournamentLogo && (
+                    <img
+                      src={tournamentLogo.src}
+                      alt={tournamentLogo.alt}
+                      className="team-detail-sanctions-header__logo"
+                    />
+                  )}
+                  <span>Jugadores sancionados</span>
+                </div>
+                <div className="team-detail-sanctions-list border rounded">
+                  {teamSuspensions.map((s) => {
+                    const pending = s.dates_pending ?? Math.max(0, (s.dates_total ?? 0) - (s.dates_served ?? 0))
+                    return (
+                      <div key={s.id} className="team-detail-sanctions-item">
+                        <div className="team-detail-sanctions-item__header">
+                          <span className="team-detail-sanctions-item__icon">{suspensionIcon(s.reason)}</span>
+                          <strong>{s.player_name}</strong>
+                        </div>
+                        <div className="team-detail-sanctions-item__reason">{s.reason_label}</div>
+                        <div className="team-detail-sanctions-item__meta">
+                          <span className="badge bg-warning text-dark">{s.status_label ?? 'Activa'}</span>
+                          <span className="team-detail-sanctions-item__pending">
+                            {pending} {pending === 1 ? 'fecha restante' : 'fechas restantes'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="small text-muted mt-2 mb-0">La sanción es informativa y no impide cargar o corregir estadísticas históricas.</p>
+              </div>
+            )}
             <div className="league-players-list">
               <Table size="sm" className="league-players-table" borderless>
                 <thead>

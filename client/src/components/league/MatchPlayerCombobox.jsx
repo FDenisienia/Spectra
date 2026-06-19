@@ -71,15 +71,14 @@ export default function MatchPlayerCombobox({
                   key={p.id}
                   type="button"
                   role="option"
-                  className={`league-player-combobox__option${suspended ? ' league-player-combobox__option--disabled' : ''}`}
-                  disabled={suspended}
+                  className={`league-player-combobox__option${suspended ? ' league-player-combobox__option--suspended' : ''}`}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => !suspended && pick(p.player_name)}
+                  onClick={() => pick(p.player_name)}
                 >
                   {p.shirt_number ? `${p.shirt_number}. ` : ''}
                   {p.player_name}
                   {p.role === 'guest' && <span className="league-player-combobox__meta"> Invitado</span>}
-                  {suspended && <span className="league-player-combobox__meta league-player-combobox__meta--danger"> Suspendido</span>}
+                  {suspended && <span className="league-player-combobox__meta league-player-combobox__meta--warning"> Sancionado</span>}
                 </button>
               )
             })

@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { Container, Card, Table, Spinner, Alert, Button, Nav } from 'react-bootstrap'
 import * as api from '../api/league'
 import { formatMatchDateTimeArgentina } from '../utils/matchDateTime'
-import TournamentLogo from '../components/tournament/TournamentLogo'
+import TournamentLogo, { getTournamentLogoMeta } from '../components/tournament/TournamentLogo'
 import TeamShield from '../components/league/TeamShield'
 import '../styles/League.css'
 import '../styles/TeamDetailSlider.css'
@@ -24,6 +24,12 @@ function roleLabel(role) {
   return labels[role] || 'Jugador'
 }
 
+function suspensionIcon(reason) {
+  if (reason === 'red_direct') return '🔴'
+  if (reason === 'green_accumulation') return '🟩'
+  return '🟡'
+}
+
 export default function TeamDetail({ tournamentId, tournament = {} }) {
   const isPadel = tournament.sport === 'padel'
   const isHockey = tournament.sport === 'hockey'
@@ -33,6 +39,7 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [suspensionByPlayer, setSuspensionByPlayer] = useState({})
+  const [teamSuspensions, setTeamSuspensions] = useState([])
   const [activeSection, setActiveSection] = useState(0)
   const [dateIndex, setDateIndex] = useState(0)
 
@@ -46,20 +53,23 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
         api.getSuspensions(tournamentId, { activeOnly: true }).catch(() => []),
       ])
       setData(detail)
-      // Mapa: player_name -> { dates_pending } para jugadores suspendidos de este equipo
+      const teamSanctions = Array.isArray(suspensions)
+        ? suspensions.filter((s) => s.team_id === teamId && s.is_active)
+        : []
+      setTeamSuspensions(teamSanctions)
+      // Mapa: player_name -> fechas pendientes (suma si hay varias sanciones activas)
       const suspensionMap = {}
-      if (Array.isArray(suspensions)) {
-        suspensions.filter((s) => s.team_id === teamId).forEach((s) => {
-          const name = s.player_name
-          if (!suspensionMap[name]) suspensionMap[name] = 0
-          suspensionMap[name] += s.dates_pending ?? Math.max(0, (s.dates_total ?? 0) - (s.dates_served ?? 0))
-        })
-      }
+      teamSanctions.forEach((s) => {
+        const name = s.player_name
+        if (!suspensionMap[name]) suspensionMap[name] = 0
+        suspensionMap[name] += s.dates_pending ?? Math.max(0, (s.dates_total ?? 0) - (s.dates_served ?? 0))
+      })
       setSuspensionByPlayer(suspensionMap)
     } catch (e) {
       setError(e.message)
       setData(null)
       setSuspensionByPlayer({})
+      setTeamSuspensions([])
     } finally {
       setLoading(false)
     }
@@ -84,6 +94,7 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
   const nextToShow = data?.nextAfterCurrent ?? (data?.nextMatch && data.nextMatch.id !== data?.currentMatch?.id ? data.nextMatch : null)
   if (nextToShow) dateItems.push({ type: 'next', label: 'Próxima fecha', match: nextToShow })
   const datesSectionIndex = isPadel ? 1 : 3
+  const tournamentLogo = getTournamentLogoMeta(tournament.sport, tournament.gender)
   const currentDateItemIndex = dateItems.findIndex((i) => i.type === 'current')
   const safeDateIndex = Math.min(Math.max(0, dateIndex), Math.max(0, dateItems.length - 1))
 
@@ -152,6 +163,45 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
           <div className="text-center py-5"><Spinner animation="border" /></div>
         ) : data ? (
           <>
+            {!isPadel && teamSuspensions.length > 0 && (
+              <Card className="team-detail-sanctions mb-3">
+                <Card.Header className="team-detail-sanctions-header fw-bold py-2">
+                  {tournamentLogo && (
+                    <img
+                      src={tournamentLogo.src}
+                      alt={tournamentLogo.alt}
+                      className="team-detail-sanctions-header__logo"
+                    />
+                  )}
+                  <span>Jugadores sancionados</span>
+                </Card.Header>
+                <Card.Body className="p-0">
+                  <div className="team-detail-sanctions-list">
+                    {teamSuspensions.map((s) => {
+                      const pending = s.dates_pending ?? Math.max(0, (s.dates_total ?? 0) - (s.dates_served ?? 0))
+                      return (
+                        <div key={s.id} className="team-detail-sanctions-item">
+                          <div className="team-detail-sanctions-item__header">
+                            <span className="team-detail-sanctions-item__icon">{suspensionIcon(s.reason)}</span>
+                            <strong>{s.player_name}</strong>
+                          </div>
+                          <div className="team-detail-sanctions-item__reason">{s.reason_label}</div>
+                          <div className="team-detail-sanctions-item__meta">
+                            <span className="badge bg-warning text-dark">{s.status_label ?? (s.is_active ? 'Activa' : 'Cumplida')}</span>
+                            {s.is_active && (
+                              <span className="team-detail-sanctions-item__pending">
+                                {pending} {pending === 1 ? 'fecha restante' : 'fechas restantes'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </Card.Body>
+              </Card>
+            )}
+
             {/* Secciones arriba */}
             <Nav className="team-detail-sections mb-3" as="ul">
               {SECTIONS.map((s, i) => (

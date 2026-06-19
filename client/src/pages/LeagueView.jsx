@@ -259,7 +259,7 @@ export default function LeagueView({ tournamentId, tournament = {}, teamId }) {
                         </div>
                         {tournament.status !== 'finished' && (
                           <p className="league-current-matchday__hint mb-0 mt-2 fw-normal">
-                            Refleja el progreso real del torneo. Los partidos postergados no bloquean el avance de fecha.
+                            Se determina según el calendario programado, no por la carga de resultados.
                           </p>
                         )}
                       </Card.Header>

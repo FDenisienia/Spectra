@@ -1159,15 +1159,20 @@ app.post('/api/tournament/:id/league/playoff/matches/:matchId/cards', requireAut
 })
 
 // --- Arranque ---
-// Escuchar en 0.0.0.0 (Railway requiere acceso externo); init DB en background
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor en http://localhost:${PORT}`)
-  console.log(`API: http://localhost:${PORT}/api/health`)
-  console.log(`Torneos: http://localhost:${PORT}/api/tournaments`)
-  ensureSchema()
-    .then(() => ensureReglamentosDir())
-    .then(() => ensureShieldsDir())
-    .then(() => seedAdmin())
-    .then(() => console.log('[Spectra] Base de datos lista'))
-    .catch((err) => console.error('[Spectra] Error init DB:', err.message))
-})
+// Init DB antes de escuchar: evita 500 en login si el proxy llega antes de que exista admin_user
+ensureSchema()
+  .then(() => ensureReglamentosDir())
+  .then(() => ensureShieldsDir())
+  .then(() => seedAdmin())
+  .then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log('[Spectra] Base de datos lista')
+      console.log(`Servidor en http://localhost:${PORT}`)
+      console.log(`API: http://localhost:${PORT}/api/health`)
+      console.log(`Torneos: http://localhost:${PORT}/api/tournaments`)
+    })
+  })
+  .catch((err) => {
+    console.error('[Spectra] Error init DB:', err.message)
+    process.exit(1)
+  })

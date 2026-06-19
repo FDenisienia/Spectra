@@ -2616,7 +2616,7 @@ a.gallery-grid-item--more:hover {
 
 /* Fondo solo detrás del logo en torneos de fútbol (pelota en césped nocturno) */
 .tournament-logo--futbol-bg {
-  background-image: url('/images/futbol-logo-bg.png');
+  background-image: url('/images/futbol-logo-bg.png?v=2');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

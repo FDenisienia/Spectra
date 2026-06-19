@@ -1,9 +1,21 @@
 const SPORT_LOGOS = {
   padel: { src: '/images/smash-open-logo.png', alt: 'Smash Open', whiteFilter: false },
   hockey: { src: '/images/entre-amigas-logo.png', alt: 'Entre Amigas Hockey', whiteFilter: false },
-  futbol_femenino: { src: '/images/estrellas-futbol-logo.png', alt: 'Estrellas del Fútbol Femenino', whiteFilter: false },
-  futbol_mixto: { src: '/images/estrellas-futbol-mixto-logo.png', alt: 'Estrellas del Fútbol Mixto', whiteFilter: false },
-  futbol_masculino: { src: '/images/estrellas-futbol-masculino-logo.png', alt: 'Estrellas del Fútbol Masculino', whiteFilter: false },
+  futbol_femenino: { src: '/images/estrellas-futbol-logo.png?v=2', alt: 'Estrellas del Fútbol Femenino', whiteFilter: false },
+  futbol_mixto: { src: '/images/estrellas-futbol-mixto-logo.png?v=2', alt: 'Estrellas del Fútbol Mixto', whiteFilter: false },
+  futbol_masculino: { src: '/images/estrellas-futbol-masculino-logo.png?v=2', alt: 'Estrellas del Fútbol Masculino', whiteFilter: false },
+}
+
+function resolveLogoKey(sport, gender) {
+  if (sport === 'futbol' && gender === 'femenino') return 'futbol_femenino'
+  if (sport === 'futbol' && gender === 'mixto') return 'futbol_mixto'
+  if (sport === 'futbol' && gender === 'masculino') return 'futbol_masculino'
+  return sport
+}
+
+export function getTournamentLogoMeta(sport, gender) {
+  const logoKey = resolveLogoKey(sport, gender)
+  return logoKey ? SPORT_LOGOS[logoKey] ?? null : null
 }
 
 export default function TournamentLogo({ sport, gender, darkBg = false }) {

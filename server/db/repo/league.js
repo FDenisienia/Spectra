@@ -1,4 +1,5 @@
 import { pool } from '../index.js'
+import { resolveCurrentMatchday } from '../../matchdayCalendar.js'
 import * as tournamentsRepo from './tournaments.js'
 import {
   getDisciplineRules,
@@ -694,13 +695,6 @@ export async function getGoalsByMatch(matchId) {
 }
 
 export async function addGoal(matchId, { player_name, team_id, goals }) {
-  const tournamentId = await getTournamentIdFromMatch(matchId)
-  if (tournamentId) {
-    const pn = (player_name || '').trim()
-    if (pn && team_id && (await isPlayerSuspended(tournamentId, pn, team_id))) {
-      throw new Error('El jugador está suspendido y no puede participar en este partido.')
-    }
-  }
   const id = genId('g')
   const qty = Math.max(1, Number(goals) || 1)
   await pool.query(
@@ -801,20 +795,26 @@ export async function getSuspensions(tournamentId, { activeOnly = false, sport =
   }
   sql += ' ORDER BY s.created_at DESC'
   const [rows] = await pool.query(sql, [tournamentId])
-  return rows.map((r) => ({
-    id: r.id,
-    player_name: r.player_name,
-    team_id: r.team_id,
-    team_name: r.team_name,
-    match_id: r.match_id,
-    reason: r.reason,
-    reason_label: getReasonLabel(r.reason),
-    dates_total: r.dates_total,
-    dates_served: r.dates_served,
-    dates_pending: Math.max(0, r.dates_total - r.dates_served),
-    is_active: r.dates_served < r.dates_total,
-    created_at: r.created_at,
-  }))
+  return rows.map((r) => {
+    const isActive = r.dates_served < r.dates_total
+    return {
+      id: r.id,
+      player_name: r.player_name,
+      team_id: r.team_id,
+      team_name: r.team_name,
+      match_id: r.match_id,
+      reason: r.reason,
+      reason_label: getReasonLabel(r.reason),
+      dates_total: r.dates_total,
+      dates_served: r.dates_served,
+      dates_pending: Math.max(0, r.dates_total - r.dates_served),
+      is_active: isActive,
+      status: isActive ? 'activa' : 'cumplida',
+      status_label: isActive ? 'Activa' : 'Cumplida',
+      start_date: r.created_at,
+      created_at: r.created_at,
+    }
+  })
 }
 
 const CARD_LABELS = { yellow: 'Amarilla', red: 'Roja', green: 'Verde' }
@@ -1000,10 +1000,6 @@ export async function addCard(matchId, { player_name, team_id, card_type, suspen
   if (!['yellow', 'red', 'green'].includes(card_type)) throw new Error('Tipo de tarjeta inválido')
   if (card_type === 'green' && !rules.has_green) throw new Error('La tarjeta verde solo aplica a torneos de hockey')
 
-  if (await isPlayerSuspended(tournamentId, pn, team_id)) {
-    throw new Error('El jugador está suspendido y no puede participar en este partido.')
-  }
-
   const id = genId('c')
   await pool.query(
     'INSERT INTO league_cards (id, match_id, player_name, team_id, card_type) VALUES (?, ?, ?, ?, ?)',
@@ -1035,36 +1031,15 @@ export async function deleteCard(cardId) {
 }
 
 // --- Current matchday ---
-/**
- * Determina la jornada actual según el progreso real del torneo.
- * - Partidos postergados no bloquean el avance.
- * - Si hay partidos jugados en fechas posteriores, las fechas anteriores quedan superadas.
- */
-export function resolveCurrentMatchday(matchdayStats) {
-  if (!matchdayStats?.length) return null
-
-  const sorted = [...matchdayStats].sort((a, b) => a.number - b.number)
-  const hasHigherPlayed = (md) =>
-    sorted.some((other) => other.number > md.number && other.played > 0)
-
-  const open = sorted.filter((md) => md.scheduled > 0 && !hasHigherPlayed(md))
-  if (open.length > 0) return open[0]
-
-  const withPlayed = sorted.filter((md) => md.played > 0)
-  if (withPlayed.length > 0) return withPlayed[withPlayed.length - 1]
-
-  return sorted[0]
-}
-
 export async function getCurrentMatchday(tournamentId) {
+  const tournament = await tournamentsRepo.getById(tournamentId)
+  if (!tournament) return null
+
   const [rows] = await pool.query(
     `SELECT md.id, md.tournament_id, md.number,
-       SUM(CASE WHEN m.status = 'played' THEN 1 ELSE 0 END) AS played,
-       SUM(CASE WHEN m.status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled,
-       SUM(CASE WHEN m.status = 'postponed' THEN 1 ELSE 0 END) AS postponed,
-       COUNT(m.id) AS total
+       MIN(DATE(m.played_at)) AS scheduled_date
      FROM league_matchdays md
-     LEFT JOIN league_matches m ON m.matchday_id = md.id
+     LEFT JOIN league_matches m ON m.matchday_id = md.id AND m.played_at IS NOT NULL
      WHERE md.tournament_id = ?
      GROUP BY md.id, md.tournament_id, md.number
      ORDER BY md.number ASC`,
@@ -1072,17 +1047,16 @@ export async function getCurrentMatchday(tournamentId) {
   )
   if (rows.length === 0) return null
 
-  const stats = rows.map((r) => ({
+  const startDate = tournament.start_date ? String(tournament.start_date).slice(0, 10) : null
+  const matchdays = rows.map((r) => ({
     id: r.id,
     tournament_id: r.tournament_id,
     number: r.number,
-    played: Number(r.played),
-    scheduled: Number(r.scheduled),
-    postponed: Number(r.postponed),
-    total: Number(r.total),
+    scheduled_date: r.scheduled_date ? String(r.scheduled_date).slice(0, 10) : null,
+    start_date: startDate,
   }))
 
-  const resolved = resolveCurrentMatchday(stats)
+  const resolved = resolveCurrentMatchday(matchdays, { tournamentStatus: tournament.status })
   if (!resolved) return null
   return { id: resolved.id, tournament_id: resolved.tournament_id, number: resolved.number }
 }
@@ -1963,13 +1937,6 @@ export async function getPlayoffGoalsByMatch(playoffMatchId) {
 }
 
 export async function addPlayoffGoal(playoffMatchId, { player_name, team_id, goals }) {
-  const tournamentId = await getTournamentIdFromPlayoffMatch(playoffMatchId)
-  if (tournamentId) {
-    const pn = (player_name || '').trim()
-    if (pn && team_id && (await isPlayerSuspended(tournamentId, pn, team_id))) {
-      throw new Error('El jugador está suspendido y no puede participar en este partido.')
-    }
-  }
   const id = genId('pg')
   const qty = Math.max(1, Number(goals) || 1)
   await pool.query(
@@ -2001,10 +1968,6 @@ export async function addPlayoffCard(playoffMatchId, { player_name, team_id, car
 
   if (!['yellow', 'red', 'green'].includes(card_type)) throw new Error('Tipo de tarjeta inválido')
   if (card_type === 'green' && !rules.has_green) throw new Error('La tarjeta verde solo aplica a torneos de hockey')
-
-  if (await isPlayerSuspended(tournamentId, pn, team_id)) {
-    throw new Error('El jugador está suspendido y no puede participar en este partido.')
-  }
 
   const id = genId('pc')
   await pool.query(
