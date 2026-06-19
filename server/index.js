@@ -707,12 +707,14 @@ app.get('/api/tournament/:id/league/teams/:teamId/detail', async (req, res) => {
     const teams = await leagueRepo.getTeams(req.params.id)
     const team = teams.find((x) => x.id === teamId)
     if (!team) return res.status(404).json({ error: 'Equipo no encontrado' })
-    const [players, scorers, discipline, matchesSummary] = await Promise.all([
+    const [players, scorers, discipline, matchesSummary, suspensions] = await Promise.all([
       leagueRepo.getTeamPlayers(teamId),
       leagueRepo.getScorersByTeam(req.params.id, teamId),
       leagueRepo.getDisciplineByTeam(req.params.id, teamId),
       leagueRepo.getTeamMatchesSummary(req.params.id, teamId),
+      leagueRepo.getSuspensions(req.params.id, { activeOnly: true }),
     ])
+    const playersWithStatus = leagueRepo.attachPlayerSuspensionStatus(players, suspensions, teamId)
     const { previousMatch, previousMatches = [], currentMatch, nextMatch, nextAfterCurrent } = matchesSummary
     const playedIds = [...previousMatches.filter((m) => m.status === 'played').map((m) => m.id)]
     if (currentMatch?.status === 'played') playedIds.push(currentMatch.id)
@@ -749,7 +751,7 @@ app.get('/api/tournament/:id/league/teams/:teamId/detail', async (req, res) => {
       : null
     res.json({
       team,
-      players,
+      players: playersWithStatus,
       scorers,
       discipline,
       nextMatch: nextMatch || null,

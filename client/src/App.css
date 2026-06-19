@@ -2614,7 +2614,30 @@ a.gallery-grid-item--more:hover {
   margin-bottom: 0.5rem;
 }
 
-/* Fondo solo detrás del logo en torneos de fútbol (pelota en césped nocturno) */
+/* Banner completo del torneo (sin escudo superpuesto) */
+.tournament-logo--banner {
+  padding: 0;
+  margin-bottom: 1rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  width: min(920px, 95vw);
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.tournament-logo--banner img {
+  width: 100% !important;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  object-fit: cover;
+  display: block;
+  margin: 0;
+  border-radius: 0.75rem;
+}
+
+/* Fondo solo detrás del logo en torneos de fútbol (legacy; ya no se usa con banner) */
 .tournament-logo--futbol-bg {
   background-image: url('/images/futbol-logo-bg.png?v=2');
   background-size: cover;

@@ -21,6 +21,29 @@ import { useConfirm } from '../hooks/useConfirm'
 const REGLAMENTO_MAX_BYTES = 5 * 1024 * 1024
 const SHIELD_MAX_BYTES = 2 * 1024 * 1024
 
+function buildTeamSuspensionLookup(sanctions) {
+  const map = new Map()
+  for (const s of sanctions) {
+    if (!s.is_active) continue
+    const key = (s.player_name || '').trim().toLowerCase()
+    if (!key) continue
+    const existing = map.get(key) || { suspended: false, reasons: [] }
+    existing.suspended = true
+    const label = s.reason_label || s.reason
+    if (label && !existing.reasons.includes(label)) existing.reasons.push(label)
+    map.set(key, existing)
+  }
+  return map
+}
+
+function getPlayerDisciplineInfo(player, lookup) {
+  if (player?.is_suspended) {
+    return { suspended: true, reasons: player.suspension_reasons ?? [] }
+  }
+  const key = (player?.player_name || '').trim().toLowerCase()
+  return lookup.get(key) || { suspended: false, reasons: [] }
+}
+
 export default function LeagueAdmin() {
   const { id: tournamentId } = useParams()
   const { confirm, ConfirmDialog } = useConfirm()
@@ -320,6 +343,8 @@ export default function LeagueAdmin() {
     }
     return { home, away }
   }, [matchGoals, editingMatchForGoals])
+
+  const teamSuspensionLookup = useMemo(() => buildTeamSuspensionLookup(teamSuspensions), [teamSuspensions])
 
   const loadTournament = () => {
     if (!tournamentId) return
@@ -2051,6 +2076,7 @@ export default function LeagueAdmin() {
                     <th className="league-players-table__th league-players-table__th--dni">DNI</th>
                     <th className="league-players-table__th league-players-table__th--num">N°</th>
                     <th className="league-players-table__th league-players-table__th--role">Rol</th>
+                    {!isPadel && <th className="league-players-table__th">Estado</th>}
                     <th className="league-players-table__th league-players-table__th--actions" />
                   </tr>
                 </thead>
@@ -2062,6 +2088,7 @@ export default function LeagueAdmin() {
                         <td className="league-players-table__td"><Form.Control size="sm" placeholder="DNI" value={editPlayerForm.dni} onChange={(e) => setEditPlayerForm((f) => ({ ...f, dni: e.target.value }))} className="league-player-row__input-dni" /></td>
                         <td className="league-players-table__td"><Form.Control size="sm" type="number" placeholder="N°" value={editPlayerForm.shirt_number} onChange={(e) => setEditPlayerForm((f) => ({ ...f, shirt_number: e.target.value }))} className="league-player-row__input-num" /></td>
                         <td className="league-players-table__td"><Form.Select size="sm" value={editPlayerForm.role} onChange={(e) => setEditPlayerForm((f) => ({ ...f, role: e.target.value }))} className="league-player-row__input-role"><option value="captain">Capitán</option><option value="player">Jugador</option><option value="guest">Invitado</option></Form.Select></td>
+                        {!isPadel && <td className="league-players-table__td">—</td>}
                         <td className="league-players-table__td league-players-table__td--actions">
                           <Button variant="link" size="sm" className="league-player-row__btn-save" onClick={handleSavePlayer}>Guardar</Button>
                           <Button variant="link" size="sm" className="league-player-row__btn-cancel" onClick={cancelEditPlayer}>Cancelar</Button>
@@ -2073,6 +2100,22 @@ export default function LeagueAdmin() {
                         <td className="league-players-table__td league-players-table__td--dni">{p.dni || '—'}</td>
                         <td className="league-players-table__td league-players-table__td--num">{p.shirt_number ?? '—'}</td>
                         <td className="league-players-table__td league-players-table__td--role">{roleLabel(p.role)}</td>
+                        {!isPadel && (
+                          <td className="league-players-table__td">
+                            {(() => {
+                              const info = getPlayerDisciplineInfo(p, teamSuspensionLookup)
+                              if (!info.suspended) return <span className="badge bg-success">Activo</span>
+                              return (
+                                <div className="team-detail-player-status">
+                                  <span className="badge bg-warning text-dark">Suspendido</span>
+                                  {info.reasons?.length > 0 && (
+                                    <div className="team-detail-player-status__reason">{info.reasons.join(' · ')}</div>
+                                  )}
+                                </div>
+                              )
+                            })()}
+                          </td>
+                        )}
                         <td className="league-players-table__td league-players-table__td--actions">
                           <Button variant="link" size="sm" className="league-player-row__btn-edit" onClick={() => startEditPlayer(p)}>Editar</Button>
                           <Button variant="link" size="sm" className="league-player-row__btn-delete" onClick={() => handleDeletePlayer(p.id)}>Eliminar</Button>

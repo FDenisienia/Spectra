@@ -30,6 +30,55 @@ function suspensionIcon(reason) {
   return '🟡'
 }
 
+function buildSuspensionLookup(sanctions) {
+  const map = new Map()
+  for (const s of sanctions) {
+    if (!s.is_active) continue
+    const key = (s.player_name || '').trim().toLowerCase()
+    if (!key) continue
+    const existing = map.get(key) || { suspended: false, pending: 0, reasons: [] }
+    existing.suspended = true
+    existing.pending += s.dates_pending ?? Math.max(0, (s.dates_total ?? 0) - (s.dates_served ?? 0))
+    const label = s.reason_label || s.reason
+    if (label && !existing.reasons.includes(label)) existing.reasons.push(label)
+    map.set(key, existing)
+  }
+  return map
+}
+
+function getPlayerDisciplineInfo(player, suspensionLookup) {
+  if (player?.is_suspended) {
+    return {
+      suspended: true,
+      pending: player.suspension_pending ?? 0,
+      reasons: player.suspension_reasons ?? [],
+    }
+  }
+  const key = (player?.player_name || '').trim().toLowerCase()
+  return suspensionLookup.get(key) || { suspended: false, pending: 0, reasons: [] }
+}
+
+function PlayerDisciplineStatus({ player, suspensionLookup }) {
+  const info = getPlayerDisciplineInfo(player, suspensionLookup)
+  if (!info.suspended) {
+    return <span className="badge bg-success">Activo</span>
+  }
+  const reasons = info.reasons?.length ? info.reasons.join(' · ') : null
+  return (
+    <div className="team-detail-player-status">
+      <span className="badge bg-warning text-dark">Suspendido</span>
+      {reasons && <div className="team-detail-player-status__reason">{reasons}</div>}
+    </div>
+  )
+}
+
+function PlayerDisciplineStatusText({ player, suspensionLookup }) {
+  const info = getPlayerDisciplineInfo(player, suspensionLookup)
+  if (!info.suspended) return 'Activo'
+  const reasons = info.reasons?.length ? info.reasons.join(' · ') : 'Sin motivo registrado'
+  return `Suspendido — ${reasons}`
+}
+
 export default function TeamDetail({ tournamentId, tournament = {} }) {
   const isPadel = tournament.sport === 'padel'
   const isHockey = tournament.sport === 'hockey'
@@ -38,8 +87,8 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [suspensionByPlayer, setSuspensionByPlayer] = useState({})
   const [teamSuspensions, setTeamSuspensions] = useState([])
+  const [suspensionLookup, setSuspensionLookup] = useState(new Map())
   const [activeSection, setActiveSection] = useState(0)
   const [dateIndex, setDateIndex] = useState(0)
 
@@ -57,19 +106,12 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
         ? suspensions.filter((s) => s.team_id === teamId && s.is_active)
         : []
       setTeamSuspensions(teamSanctions)
-      // Mapa: player_name -> fechas pendientes (suma si hay varias sanciones activas)
-      const suspensionMap = {}
-      teamSanctions.forEach((s) => {
-        const name = s.player_name
-        if (!suspensionMap[name]) suspensionMap[name] = 0
-        suspensionMap[name] += s.dates_pending ?? Math.max(0, (s.dates_total ?? 0) - (s.dates_served ?? 0))
-      })
-      setSuspensionByPlayer(suspensionMap)
+      setSuspensionLookup(buildSuspensionLookup(teamSanctions))
     } catch (e) {
       setError(e.message)
       setData(null)
-      setSuspensionByPlayer({})
       setTeamSuspensions([])
+      setSuspensionLookup(new Map())
     } finally {
       setLoading(false)
     }
@@ -239,15 +281,15 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
                               </thead>
                               <tbody>
                                 {data.players.map((p) => {
-                                  const pending = suspensionByPlayer[p.player_name]
-                                  const suspended = pending != null && pending > 0
+                                  const info = getPlayerDisciplineInfo(p, suspensionLookup)
+                                  const suspended = info.suspended
                                   return (
                                     <tr key={p.id} className={suspended ? 'table-warning' : ''}>
                                       <td>{p.player_name}</td>
                                       <td>{p.shirt_number ?? '—'}</td>
                                       <td>{roleLabel(p.role)}</td>
                                       {!isPadel && (
-                                        <td>{suspended ? <span className="badge bg-warning text-dark">Suspendido ({pending} {pending === 1 ? 'fecha' : 'fechas'})</span> : <span className="badge bg-success">Activo</span>}</td>
+                                        <td><PlayerDisciplineStatus player={p} suspensionLookup={suspensionLookup} /></td>
                                       )}
                                     </tr>
                                   )
@@ -256,8 +298,8 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
                             </Table>
                             <div className="team-detail-list d-sm-none">
                               {data.players.map((p) => {
-                                const pending = suspensionByPlayer[p.player_name]
-                                const suspended = pending != null && pending > 0
+                                const info = getPlayerDisciplineInfo(p, suspensionLookup)
+                                const suspended = info.suspended
                                 return (
                                   <div key={p.id} className={`team-detail-list-item ${suspended ? 'team-detail-list-item--suspended' : ''}`}>
                                     <span className="team-detail-list-label">Nombre</span>
@@ -269,7 +311,9 @@ export default function TeamDetail({ tournamentId, tournament = {} }) {
                                     {!isPadel && (
                                       <>
                                         <span className="team-detail-list-label">Estado</span>
-                                        <span className="team-detail-list-value">{suspended ? `Suspendido (${pending} ${pending === 1 ? 'fecha' : 'fechas'})` : 'Activo'}</span>
+                                        <span className="team-detail-list-value">
+                                          <PlayerDisciplineStatusText player={p} suspensionLookup={suspensionLookup} />
+                                        </span>
                                       </>
                                     )}
                                   </div>

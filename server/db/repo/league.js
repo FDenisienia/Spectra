@@ -817,6 +817,34 @@ export async function getSuspensions(tournamentId, { activeOnly = false, sport =
   })
 }
 
+function normalizePlayerName(name) {
+  return (name || '').trim().toLowerCase()
+}
+
+/** Agrega estado disciplinario a jugadores del plantel según suspensiones activas del equipo */
+export function attachPlayerSuspensionStatus(players, suspensions, teamId) {
+  const byName = new Map()
+  for (const s of suspensions) {
+    if (s.team_id !== teamId || !s.is_active) continue
+    const key = normalizePlayerName(s.player_name)
+    if (!key) continue
+    const existing = byName.get(key) || { pending: 0, reasons: [] }
+    existing.pending += s.dates_pending ?? Math.max(0, (s.dates_total ?? 0) - (s.dates_served ?? 0))
+    const label = s.reason_label || s.reason
+    if (label && !existing.reasons.includes(label)) existing.reasons.push(label)
+    byName.set(key, existing)
+  }
+  return players.map((p) => {
+    const sus = byName.get(normalizePlayerName(p.player_name))
+    return {
+      ...p,
+      is_suspended: Boolean(sus?.pending),
+      suspension_pending: sus?.pending ?? 0,
+      suspension_reasons: sus?.reasons ?? [],
+    }
+  })
+}
+
 const CARD_LABELS = { yellow: 'Amarilla', red: 'Roja', green: 'Verde' }
 
 /** Historial disciplinario: tarjetas + suspensiones con contexto. Incluye fase de grupos y playoffs. */
