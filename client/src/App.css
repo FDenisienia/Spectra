@@ -2637,7 +2637,51 @@ a.gallery-grid-item--more:hover {
   border-radius: 0.75rem;
 }
 
-/* Fondo solo detrás del logo en torneos de fútbol (legacy; ya no se usa con banner) */
+/* Fútbol: mismo fondo a ancho completo + escudo centrado (masculino, femenino, mixto) */
+.tournament-logo--futbol-hero {
+  padding: 0;
+  margin-bottom: 1rem;
+  border-radius: 0;
+  overflow: hidden;
+  width: 100vw;
+  max-width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: clamp(200px, 38vw, 420px);
+  background-image: url('/images/futbol-logo-bg.png?v=3');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-sizing: border-box;
+}
+
+.tournament-logo--futbol-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.18) 100%);
+  pointer-events: none;
+}
+
+.tournament-logo--futbol-hero img {
+  position: relative;
+  z-index: 1;
+  width: min(320px, 72%) !important;
+  min-width: 0 !important;
+  max-width: min(400px, 80%) !important;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0;
+}
+
+/* Fondo solo detrás del logo en torneos de fútbol (legacy) */
 .tournament-logo--futbol-bg {
   background-image: url('/images/futbol-logo-bg.png?v=2');
   background-size: cover;
