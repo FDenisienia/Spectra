@@ -21,14 +21,20 @@ import { useConfirm } from '../hooks/useConfirm'
 const REGLAMENTO_MAX_BYTES = 5 * 1024 * 1024
 const SHIELD_MAX_BYTES = 2 * 1024 * 1024
 
+function formatSuspensionPending(pending) {
+  if (!pending || pending <= 0) return null
+  return pending === 1 ? 'Queda 1 fecha' : `Quedan ${pending} fechas`
+}
+
 function buildTeamSuspensionLookup(sanctions) {
   const map = new Map()
   for (const s of sanctions) {
     if (!s.is_active) continue
     const key = (s.player_name || '').trim().toLowerCase()
     if (!key) continue
-    const existing = map.get(key) || { suspended: false, reasons: [] }
+    const existing = map.get(key) || { suspended: false, pending: 0, reasons: [] }
     existing.suspended = true
+    existing.pending += s.dates_pending ?? Math.max(0, (s.dates_total ?? 0) - (s.dates_served ?? 0))
     const label = s.reason_label || s.reason
     if (label && !existing.reasons.includes(label)) existing.reasons.push(label)
     map.set(key, existing)
@@ -37,11 +43,16 @@ function buildTeamSuspensionLookup(sanctions) {
 }
 
 function getPlayerDisciplineInfo(player, lookup) {
-  if (player?.is_suspended) {
-    return { suspended: true, reasons: player.suspension_reasons ?? [] }
-  }
   const key = (player?.player_name || '').trim().toLowerCase()
-  return lookup.get(key) || { suspended: false, reasons: [] }
+  const fromLookup = lookup.get(key)
+  if (player?.is_suspended) {
+    return {
+      suspended: true,
+      pending: player.suspension_pending ?? fromLookup?.pending ?? 0,
+      reasons: player.suspension_reasons?.length ? player.suspension_reasons : (fromLookup?.reasons ?? []),
+    }
+  }
+  return fromLookup || { suspended: false, pending: 0, reasons: [] }
 }
 
 export default function LeagueAdmin() {
@@ -2105,11 +2116,15 @@ export default function LeagueAdmin() {
                             {(() => {
                               const info = getPlayerDisciplineInfo(p, teamSuspensionLookup)
                               if (!info.suspended) return <span className="badge bg-success">Activo</span>
+                              const pendingLabel = formatSuspensionPending(info.pending)
                               return (
                                 <div className="team-detail-player-status">
                                   <span className="badge bg-warning text-dark">Suspendido</span>
                                   {info.reasons?.length > 0 && (
                                     <div className="team-detail-player-status__reason">{info.reasons.join(' · ')}</div>
+                                  )}
+                                  {pendingLabel && (
+                                    <div className="team-detail-player-status__pending">{pendingLabel}</div>
                                   )}
                                 </div>
                               )

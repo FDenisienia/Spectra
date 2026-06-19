@@ -30,6 +30,11 @@ function suspensionIcon(reason) {
   return '🟡'
 }
 
+function formatSuspensionPending(pending) {
+  if (!pending || pending <= 0) return null
+  return pending === 1 ? 'Queda 1 fecha' : `Quedan ${pending} fechas`
+}
+
 function buildSuspensionLookup(sanctions) {
   const map = new Map()
   for (const s of sanctions) {
@@ -64,10 +69,12 @@ function PlayerDisciplineStatus({ player, suspensionLookup }) {
     return <span className="badge bg-success">Activo</span>
   }
   const reasons = info.reasons?.length ? info.reasons.join(' · ') : null
+  const pendingLabel = formatSuspensionPending(info.pending)
   return (
     <div className="team-detail-player-status">
       <span className="badge bg-warning text-dark">Suspendido</span>
       {reasons && <div className="team-detail-player-status__reason">{reasons}</div>}
+      {pendingLabel && <div className="team-detail-player-status__pending">{pendingLabel}</div>}
     </div>
   )
 }
@@ -76,7 +83,8 @@ function PlayerDisciplineStatusText({ player, suspensionLookup }) {
   const info = getPlayerDisciplineInfo(player, suspensionLookup)
   if (!info.suspended) return 'Activo'
   const reasons = info.reasons?.length ? info.reasons.join(' · ') : 'Sin motivo registrado'
-  return `Suspendido — ${reasons}`
+  const pendingLabel = formatSuspensionPending(info.pending)
+  return pendingLabel ? `Suspendido — ${reasons} (${pendingLabel})` : `Suspendido — ${reasons}`
 }
 
 export default function TeamDetail({ tournamentId, tournament = {} }) {
